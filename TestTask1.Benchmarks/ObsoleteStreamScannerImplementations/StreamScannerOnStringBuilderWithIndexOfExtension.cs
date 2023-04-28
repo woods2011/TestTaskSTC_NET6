@@ -13,7 +13,7 @@ public class StreamScannerOnStringBuilderWithIndexOfExtension : StreamScannerBas
     public override async Task ScanStreamAsync(
         Stream stream,
         StreamScanParams scanParams,
-        int bufferSize = 1024 * 4,
+        int bufferSize = 4096,
         CancellationToken token = default)
     {
         StringBuilder stringBuffer = new();

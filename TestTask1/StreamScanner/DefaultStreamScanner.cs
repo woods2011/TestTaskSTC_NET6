@@ -4,19 +4,33 @@ using TestTask1.Helpers;
 
 namespace TestTask1.StreamScanner;
 
+/// <summary>
+/// Структура для хранения информации о совпадениях найденых в процессе сканирования потока.
+/// </summary>
 public record struct ScanMatch(string MatchValue, int RangeLength, int MatchIndexInRange);
 
+/// <summary>
+/// Базовый класс для сканеров потока. Реализует методы для параллельного сканирования потоков.
+/// </summary>
 public abstract class StreamScannerBase
 {
     protected readonly Action<ScanMatch> MatchNotifier;
 
+    /// <param name="matchNotifier">Делегат для уведомления о найденных совпадениях.</param>
     protected StreamScannerBase(Action<ScanMatch>? matchNotifier = null) =>
         MatchNotifier = matchNotifier ?? (_ => { });
 
+    /// <summary>
+    /// Сканирует все потоки из коллекции параллельно и асинхронно в соответствии с заданными параметрами сканирования.
+    /// </summary>
+    /// <param name="streams">Коллекция потоков для сканирования.</param>
+    /// <param name="scanParams">Параметры сканирования.</param>
+    /// <param name="bufferSize">Размер буфера для чтения потока (по умолчанию равен 1024 байт).</param>
+    /// <param name="token">CancellationToken.</param>
     public async Task ScanStreamsInParallelAsync(
         IEnumerable<Stream> streams,
         StreamScanParams scanParams,
-        int bufferSize = 1024 * 4,
+        int bufferSize = 4096,
         CancellationToken token = default)
     {
         await Parallel.ForEachAsync(
@@ -25,11 +39,13 @@ public abstract class StreamScannerBase
             async (stream, ct) => await ScanStreamAsync(stream, scanParams, bufferSize, ct));
     }
 
+    /// <inheritdoc cref="ScanStreamsInParallelAsync(IEnumerable{Stream}, StreamScanParams, int, CancellationToken)"/>
+    /// <param name="maxDegreeOfParallelism">Максимальное число параллельных задач.</param>
     public async Task ScanStreamsInParallelAsync(
         IEnumerable<Stream> streams,
         StreamScanParams scanParams,
         int maxDegreeOfParallelism,
-        int bufferSize = 1024 * 4,
+        int bufferSize = 4096,
         CancellationToken token = default)
     {
         await Parallel.ForEachAsync(
@@ -38,21 +54,30 @@ public abstract class StreamScannerBase
             async (stream, ct) => await ScanStreamAsync(stream, scanParams, bufferSize, ct));
     }
 
+    /// <summary>
+    /// Асинхронно сканирует поток в соответствии с заданными параметрами сканирования.
+    /// </summary>
+    /// <param name="stream">Поток для сканирования.</param>
+    /// <param name="scanParams">Параметры сканирования.</param>
+    /// <param name="bufferSize">Размер буфера для чтения потока (по умолчанию равен 4096 байт).</param>
+    /// <param name="token">CancellationToken.</param>
     public abstract Task ScanStreamAsync(
         Stream stream,
         StreamScanParams scanParams,
-        int bufferSize = 1024 * 4,
+        int bufferSize = 4096,
         CancellationToken token = default);
 }
 
 public class DefaultStreamScanner : StreamScannerBase
 {
+    /// <inheritdoc/>
     public DefaultStreamScanner(Action<ScanMatch>? matchNotifier = null) : base(matchNotifier) { }
 
+    /// <inheritdoc/>
     public override async Task ScanStreamAsync(
         Stream stream,
         StreamScanParams scanParams,
-        int bufferSize = 1024 * 4,
+        int bufferSize = 4096,
         CancellationToken token = default)
     {
         Encoding encoding = Encoding.ASCII; // т.к. кодировка 1 байт не нужно хранить encoding.GetDecoder();

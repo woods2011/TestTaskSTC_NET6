@@ -6,9 +6,9 @@ using TestTask1.StreamScanner;
 var cancellationToken = CancellationToken.None; // Для наглядности
 
 // Пример ввода для стандартных данных: Start: start, end: End, contains: Contains, template: \d+, max: 1000
-var fallbackData = "some data Start some data 10 Contains some data 11 End some data";
+const string fallbackData = "some data Start some data 10 Contains some data 11 End some data";
 
-string directoryPath = "TestFiles";
+const string directoryPath = "TestFiles";
 string[] defaultFilePaths =
 {
     Path.Combine(directoryPath, "test1.txt"),
@@ -16,7 +16,10 @@ string[] defaultFilePaths =
     Path.Combine(directoryPath, "test3.txt")
 };
 
+string outputFilePath = Path.Combine(directoryPath, "MatchLog.txt");
+
 InitFilesWithFallBackDataIfAllEmpty();
+
 
 StreamScanParams scanParams = HandleInput();
 
@@ -24,14 +27,16 @@ IEnumerable<Stream> streams = defaultFilePaths
     .Where(File.Exists)
     .Select(filePath => new FileStream(filePath, FileMode.Open));
 
-using ILoggerFactory loggerFactory = LoggerFactory.Create(builder => builder.AddConsole().AddFile("MatchLog.txt"));
+using ILoggerFactory loggerFactory = LoggerFactory.Create(builder => builder.AddConsole().AddFile(outputFilePath));
 using var loggerSubscriber = new LoggerSubscriber(loggerFactory.CreateLogger<LoggerSubscriber>());
 
 await new DefaultStreamScanner(loggerSubscriber.MatchHandler).ScanStreamsInParallelAsync(
     streams: streams,
     scanParams,
-    bufferSize: 1024 * 4,
+    bufferSize: 4096,
     cancellationToken);
+
+Console.WriteLine($"Результат записан в файл: {Path.GetFullPath(outputFilePath)}");
 
 
 void InitFilesWithFallBackDataIfAllEmpty()
@@ -75,7 +80,7 @@ static StreamScanParams HandleInput()
         }
         catch (Exception e)
         {
-            Console.WriteLine($"Ошибка ввода: {e.Message}{Environment.NewLine}");
+            Console.WriteLine($"{Environment.NewLine}Ошибка ввода: {e.Message}{Environment.NewLine}");
         }
     }
 }

@@ -19,13 +19,12 @@ public class StreamScanParams
         int max,
         bool ignoreCase = false)
     {
-        ValidateArgumentForEmpty(start, nameof(start));
-        ValidateArgumentForEmpty(end, nameof(end));
+        ValidateArgumentForLengthFrom2To63(start, nameof(start));
+        ValidateArgumentForLengthFrom2To63(end, nameof(end));
+        ValidateArgumentForLengthFrom2To63(contains, nameof(contains));
         ValidateArgumentForEmpty(template, nameof(template));
-
-        if (max <= 0)
-            throw new ArgumentOutOfRangeException(nameof(max), "Значение параметра должно быть больше 0");
-
+        if (max <= 0) throw new ArgumentOutOfRangeException(nameof(max), "Значение параметра должно быть больше 0");
+        
         Start = start;
         End = end;
         Contains = contains;
@@ -35,11 +34,17 @@ public class StreamScanParams
         RegexOptions regexOptions = RegexOptions.Compiled | RegexOptions.CultureInvariant;
         if (IgnoreCase) regexOptions |= RegexOptions.IgnoreCase;
         Regex = new Regex(template, regexOptions);
-        
+
         static void ValidateArgumentForEmpty(string param, string paramName)
         {
             if (string.IsNullOrEmpty(param))
                 throw new ArgumentException("Параметр не может быть пустым", paramName);
+        }
+
+        static void ValidateArgumentForLengthFrom2To63(string param, string paramName)
+        {
+            if (param.Length is < 2 or > 63)
+                throw new ArgumentOutOfRangeException(paramName, "Длина параметра должна быть от 2 до 63 символов");
         }
     }
 }

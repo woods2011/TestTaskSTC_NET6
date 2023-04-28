@@ -2,12 +2,23 @@
 
 namespace TestTask2.Benchmarks.ObsoleteHtmlScannerCleanerImplementations;
 
+/// <summary>
+/// Класс предназначеный для удаления HTML-тегов из потока.
+/// </summary>
 public static class HtmlStreamCleanerWithStreamReader
 {
+    /// <summary>
+    /// Асинхронно удаляет HTML-теги из входного потока и записывает результат в выходной поток.
+    /// </summary>
+    /// <param name="inputStream">Входной поток, содержащий HTML-теги.</param>
+    /// <param name="outputStream">Выходной поток для записи результата очищенный от HTML-тегов.</param>
+    /// <param name="readBufferSize">Размер буфера для чтения потока (по умолчанию равен 4096 байт).</param>
+    /// <param name="encoding">Кодировка потока (по умолчанию UTF-8).</param>
+    /// <param name="token">CancellationToken.</param>
     public static async Task RemoveHtmlTagsFromStreamAsync(
         Stream inputStream,
         Stream outputStream,
-        int readBufferSize = 1024,
+        int readBufferSize = 4096,
         Encoding? encoding = null,
         CancellationToken token = default)
     {
