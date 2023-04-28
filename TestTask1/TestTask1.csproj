@@ -19,4 +19,16 @@
         <InternalsVisibleTo Include="TestTask1.IntegrationTests" />
     </ItemGroup>
 
+    <ItemGroup>
+      <None Update="TestFiles\test3.txt">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+      <None Update="TestFiles\test2.txt">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+      <None Update="TestFiles\test1.txt">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+    </ItemGroup>
+
 </Project>

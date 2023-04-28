@@ -10,7 +10,11 @@ var fallbackData = "some data Start some data 10 Contains some data 11 End some 
 
 string directoryPath = "TestFiles";
 string[] defaultFilePaths =
-    { $"{directoryPath}/test1.txt", $"{directoryPath}/test2.txt", $"{directoryPath}/test3.txt" };
+{
+    Path.Combine(directoryPath, "test1.txt"),
+    Path.Combine(directoryPath, "test2.txt"),
+    Path.Combine(directoryPath, "test3.txt")
+};
 
 InitFilesWithFallBackDataIfAllEmpty();
 
@@ -21,7 +25,7 @@ IEnumerable<Stream> streams = defaultFilePaths
     .Select(filePath => new FileStream(filePath, FileMode.Open));
 
 using ILoggerFactory loggerFactory = LoggerFactory.Create(builder => builder.AddConsole().AddFile("MatchLog.txt"));
-var loggerSubscriber = new LoggerSubscriber(loggerFactory.CreateLogger<LoggerSubscriber>());
+using var loggerSubscriber = new LoggerSubscriber(loggerFactory.CreateLogger<LoggerSubscriber>());
 
 await new DefaultStreamScanner(loggerSubscriber.MatchHandler).ScanStreamsInParallelAsync(
     streams: streams,

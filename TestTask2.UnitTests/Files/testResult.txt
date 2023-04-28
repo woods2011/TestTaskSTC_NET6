@@ -1,0 +1,107 @@
+
+
+
+    
+    Пример HTML-файла
+
+
+Привет, мир!
+Это пример HTML-файла, содержащего текст на русском и английском языках.
+
+    Пункт 1
+    Пункт 2
+    Пункт 3
+
+Hello, world!
+This is an example of an HTML file containing text in Russian and English languages.
+
+    Item 1
+    Item 2
+    Item 3
+
+Привет, мир!
+Это пример HTML-файла, содержащего текст на русском и английском языках.
+
+    Пункт 1
+    Пункт 2
+    Пункт 3
+
+Hello, world!
+This is an example of an HTML file containing text in Russian and English languages.
+
+    Item 1
+    Item 2
+    Item 3
+
+Привет, мир!
+Это пример HTML-файла, содержащего текст на русском и английском языках.
+
+    Пункт 1
+    Пункт 2
+    Пункт 3
+
+Hello, world!
+This is an example of an HTML file containing text in Russian and English languages.
+
+    Item 1
+    Item 2
+    Item 3
+
+Привет, мир!
+Это пример HTML-файла, содержащего текст на русском и английском языках.
+
+    Пункт 1
+    Пункт 2
+    Пункт 3
+
+Hello, world!
+This is an example of an HTML file containing text in Russian and English languages.
+
+    Item 1
+    Item 2
+    Item 3
+
+Привет, мир!
+Это пример HTML-файла, содержащего текст на русском и английском языках.
+
+    Пункт 1
+    Пункт 2
+    Пункт 3
+
+Hello, world!
+This is an example of an HTML file containing text in Russian and English languages.
+
+    Item 1
+    Item 2
+    Item 3
+
+Привет, мир!
+Это пример HTML-файла, содержащего текст на русском и английском языках.
+
+    Пункт 1
+    Пункт 2
+    Пункт 3
+
+Hello, world!
+This is an example of an HTML file containing text in Russian and English languages.
+
+    Item 1
+    Item 2
+    Item 3
+
+Привет, мир!
+Это пример HTML-файла, содержащего текст на русском и английском языках.
+
+    Пункт 1
+    Пункт 2
+    Пункт 3
+
+Hello, world!
+This is an example of an HTML file containing text in Russian and English languages.
+
+    Item 1
+    Item 2
+    Item 3
+
+
+
