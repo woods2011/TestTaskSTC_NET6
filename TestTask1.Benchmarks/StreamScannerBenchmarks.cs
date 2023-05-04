@@ -1,154 +1,116 @@
-﻿using System.Diagnostics;
-using System.Text;
+﻿using System.Text;
 using BenchmarkDotNet.Attributes;
 using TestTask1.Benchmarks.ObsoleteStreamScannerImplementations;
 using TestTask1.StreamScanner;
+using TestTask1.TestFiles;
 
 namespace TestTask1.Benchmarks;
 
 [MemoryDiagnoser]
 public class StreamScannerBenchmarks
 {
-    [Params(256, 1024)]
+    [Params(4096, 4096 * 4)]
     public int BufferSize { get; set; }
 
 
     [Benchmark(Baseline = true)]
     [ArgumentsSource(nameof(TestDataSets))]
-    [DebuggerStepThrough]
-    public async Task ScannerOnSpans(TestDataSet testData)
+    public async Task DefaultStreamScanner(TestDataSet testData)
     {
-        testData.Stream.Position = 0;
-        await new DefaultStreamScanner().ScanStreamAsync(testData.Stream, testData.ScanParams, BufferSize);
+        // MemoryStream stream = testData.InMemoryVersion;
+        // stream.Position = 0;
+        await using FileStream stream = File.Open(testData.FilePath, FileMode.Open, FileAccess.Read);
+        await new DefaultStreamScanner().ScanStreamAsync(stream, testData.ScanParams, BufferSize);
     }
 
     [Benchmark]
     [ArgumentsSource(nameof(TestDataSets))]
-    public async Task ScannerOnSpansWithStreamReader(TestDataSet testData)
+    public async Task SimpleGreedyStreamScanner(TestDataSet testData)
     {
-        testData.Stream.Position = 0;
-        await new StreamScannerWithStreamReader().ScanStreamAsync(testData.Stream, testData.ScanParams, BufferSize);
-    }
-    
-    [Benchmark]
-    [ArgumentsSource(nameof(TestDataSets))]
-    public async Task ScannerOnStringBuilder(TestDataSet testData)
-    {
-        testData.Stream.Position = 0;
-        await new StreamScannerOnStringBuilder().ScanStreamAsync(testData.Stream, testData.ScanParams, BufferSize);
+        // MemoryStream stream = testData.InMemoryVersion;
+        // stream.Position = 0;
+        await using FileStream stream = File.Open(testData.FilePath, FileMode.Open, FileAccess.Read);
+        await new SimpleGreedyStreamScanner().ScanStreamAsync(stream, testData.ScanParams, BufferSize);
     }
 
-    [Benchmark]
-    [ArgumentsSource(nameof(TestDataSets))]
-    public async Task ScannerOnStringBuilderWithIndexOf(TestDataSet testData)
-    {
-        testData.Stream.Position = 0;
-        await new StreamScannerOnStringBuilderWithIndexOfExtension()
-            .ScanStreamAsync(testData.Stream, testData.ScanParams, BufferSize);
-    }
+    // [Benchmark]
+    // [ArgumentsSource(nameof(TestDataSets))]
+    // public async Task OldScanner(TestDataSet testData)
+    // {
+    //     // MemoryStream stream = testData.InMemoryVersion;
+    //     // stream.Position = 0;
+    //     await using FileStream stream = File.Open(testData.FilePath, FileMode.Open, FileAccess.Read);
+    //     await new OldStreamScanner().ScanStreamAsync(stream, testData.ScanParams, BufferSize);
+    // }
 
 
     public static IEnumerable<TestDataSet> TestDataSets()
     {
-        var random = new Random(1);
-
-        string start = "START";
-        string end = "END";
-        string contains = "CONTAINS";
-        int max = 1000;
-        bool ignoreCase = true;
+        const int randomSeedValue = 5;
+        const string filesDirectoryPath = "TestFiles";
         
+        if (!Directory.Exists(filesDirectoryPath)) // Directory.CreateDirectory(filesDirectoryPath)
+            Directory.CreateDirectory(filesDirectoryPath);
 
-        #region TestData для Простого регулярного выражения
-
-        string simpleTemplate = @"\d+"; // Любая последовательность цифр
-        string[] simpleTemplateMatchedContent =
-            new[] { 10, 11, 557, 1234, 12345, 123456, 1234567, 12345678, 12345678 }.Select(i => i.ToString()).ToArray();
-
-        // (Малый и Часто встречающийся Диапазон)
-        var test1Name = "TD1_МалыйЧастыйДиапазон_ПростоеРегВыр";
-        string test1String = ShortRangeDataFactory(
-            () => GetRandomElement(simpleTemplateMatchedContent, random), start, end, contains).Repeat(16);
-        yield return CreateTestData(start, end, contains, simpleTemplate, max, ignoreCase, test1String, test1Name);
-
-        // (Большой Диапазон)
-        var test2Name = "TD2_БольшойДиапазон_ПростоеРегВыр";
-        string test2String = LongRangeDataFactory(
-            () => GetRandomElement(simpleTemplateMatchedContent, random), start, end, contains).Repeat(5);
-        yield return CreateTestData(start, end, contains, simpleTemplate, max, ignoreCase, test2String, test2Name);
-
-        #endregion
+        var streamScanParams = new StreamScanParams(
+            start: "STARTING",
+            end: "ENDING",
+            contains: "CONTAINS",
+            template: @"(\+\d{1,2}\s?)?(\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}", // Regex для номера телефона (US)
+            max: 65000,
+            ignoreCase: false);
 
 
-        #region TestData для Сложного регулярного выражения
+        // -------------------------------------------------------------------------------------------------------------
+        const string testCase1BaseName = "TD1_200МБ_ИзВашегоПисьма_ОдинБольшойДиапазон";
+        string testCase1FilePath = Path.Combine(filesDirectoryPath, "TD1_200MB_FromGmail_RangeFrom1000to50000+.txt");
 
-        string hardTemplate = @"\b(?:\d{1,3}(?:,\d{3})*|\d+)(?:\.\d+)?\b"; // Числа с плавающей точкой
-        string[] hardTemplateMatchedContent =
-            { "1", "1.1", "1,1", "1,111", "1,111,111", "1,111,111.1", "1,111,111.111" };
-
-        // (Малый и Часто встречающийся Диапазон)
-        var test3Name = "TD3_МалыйЧастыйДиапазон_СложноеРегВыр";
-        string test3String = ShortRangeDataFactory(
-            () => GetRandomElement(hardTemplateMatchedContent, random), start, end, contains).Repeat(15);
-        yield return CreateTestData(start, end, contains, hardTemplate, max, ignoreCase, test3String, test3Name);
-
-        // (Большой Диапазон)
-        var test4Name = "TD4_БольшойДиапазон_СложноеРегВыр";
-        string test4String = LongRangeDataFactory(
-            () => GetRandomElement(hardTemplateMatchedContent, random), start, end, contains).Repeat(5);
-        yield return CreateTestData(start, end, contains, hardTemplate, max, ignoreCase, test4String, test4Name);
-
-        #endregion
-
-
-        static TestDataSet CreateTestData(
-            string start,
-            string end,
-            string contains,
-            string template,
-            int max,
-            bool ignoreCase,
-            string testDataString,
-            string testCaseName)
+        if (!File.Exists(testCase1FilePath)) // Закомментировать если необходимо чтобы создавался новый файл
         {
-            byte[] testBytes = Encoding.ASCII.GetBytes(testDataString);
-
-            return new TestDataSet(
-                new MemoryStream(testBytes),
-                new StreamScanParams(start, end, contains, template, max, ignoreCase),
-                testCaseName);
+            TestDataProvider.GenerateTestDataFromVasheGmailPismo(
+                matchedValue: "+1 (555) 123-4567",
+                startMarker: streamScanParams.Start,
+                endMarker: streamScanParams.End,
+                containsMarker: streamScanParams.Contains,
+                filePath: testCase1FilePath,
+                fileSizeInMegaBytes: 200,
+                rndSeed: randomSeedValue); // Передать null для Random.Shared
         }
 
-        static string ShortRangeDataFactory(Func<string> matchFactory, string start, string end, string contains) =>
-            $"someData {start} someData {matchFactory()} someData someData {matchFactory()} {end} someData  " +
-            $"someData data someData someData someData someData someData someData someData someData someData" +
-            $"someData {start} someData {matchFactory()} {contains} someData {matchFactory()} {end} someData" +
-            $"someData {start} someData {matchFactory()} someData someData {matchFactory()} {end}  someData ";
+        yield return new TestDataSet(testCase1BaseName, streamScanParams, testCase1FilePath);
 
-        static string LongRangeDataFactory(Func<string> matchFactory, string start, string end, string contains) =>
-            $"someData {start} someData {contains} {matchFactory()} someData {matchFactory()} {end} someData" +
-            $"{start}  data someData someData someData someData someData someData someData someData someData" +
-            $"someData data someData someData someData someData someData someData someData someData someData" +
-            $"someData data someData someData someData someData someData someData someData someData someData" +
-            $"someData data someData someData {matchFactory()} someData someData someData someData someData " +
-            $"someData data someData someData someData someData someData someData someData someData someData" +
-            $"someData data someData someData {matchFactory()} someData someData someData someData someData " +
-            $"someData data someData someData someData someData someData someData someData someData someData" +
-            $"someData data someData someData {matchFactory()} someData someData someData someData someData " +
-            $"someData data someData someData someData someData someData someData someData someData    {end}" +
-            $"someData {start} someData someData   {matchFactory()} someData {matchFactory()} {end} s{start}";
-        
-        static string GetRandomElement(IReadOnlyList<string> data, Random random) => data[random.Next(0, data.Count)];
+
+        // -------------------------------------------------------------------------------------------------------------
+        const string testCase2BaseName = "TD2_200МБ_ОченьМногоДиапазонов(Валидных<Невалидных)";
+        string testCase2FilePath = Path.Combine(filesDirectoryPath, "TD2_200MB_LotsOfValidAndInvalidRanges.txt");
+
+        // if (!File.Exists(testCase2FilePath)) // Закомментировать если необходимо чтобы создавался новый файл
+        {
+            TestDataProvider.GenerateFullyRandomTestData(
+                matchedValue: "+1 (555) 123-4567",
+                startMarker: streamScanParams.Start,
+                endMarker: streamScanParams.End,
+                containsMarker: streamScanParams.Contains,
+                filePath: testCase2FilePath,
+                fileSizeInMegaBytes: 200,
+                dataInsertPerByteProbability: 1e-2,
+                rndSeed: randomSeedValue); // Передать null для Random.Shared
+        }
+
+        yield return new TestDataSet(testCase2BaseName, streamScanParams, testCase2FilePath);
     }
 
-    public record TestDataSet(MemoryStream Stream, StreamScanParams ScanParams, string BaseName)
+    public record TestDataSet(string BaseTestCaseName, StreamScanParams ScanParams, string FilePath)
     {
-        public override string ToString() => $"{BaseName}: ({Stream.ToArray().Length} bytes)";
+        public MemoryStream InMemoryVersion { get; } = new(Encoding.ASCII.GetBytes(File.ReadAllText(FilePath)));
+
+        public override string ToString() => $"{BaseTestCaseName}: ({InMemoryVersion.ToArray().Length} bytes)";
     }
 }
 
-internal static class StringHelpers
-{
-    public static string Repeat(this string value, int count) =>
-        new StringBuilder(count * value.Length).Insert(0, value, count).ToString();
-}
+// [DebuggerStepThrough]
+// string start = "START";
+// string end = "END";
+// string contains = "CONTAINS";
+// int max = 1000;
+// bool ignoreCase = true;

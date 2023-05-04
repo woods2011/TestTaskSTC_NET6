@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace TestTask1.StreamScanner;
@@ -5,8 +6,16 @@ namespace TestTask1.StreamScanner;
 public class StreamScanParams
 {
     public string Start { get; }
+    public byte[] StartBytes { get; }
+    public int StartLen { get; }
+
     public string End { get; }
+    public int EndLen { get; }
+    public byte[] EndBytes { get; }
+
     public string Contains { get; }
+    public byte[] ContainsBytes { get; }
+
     public int Max { get; }
     public bool IgnoreCase { get; }
     public Regex Regex { get; }
@@ -24,12 +33,19 @@ public class StreamScanParams
         ValidateArgumentForLengthFrom2To63(contains, nameof(contains));
         ValidateArgumentForEmpty(template, nameof(template));
         if (max <= 0) throw new ArgumentOutOfRangeException(nameof(max), "Значение параметра должно быть больше 0");
-        
+
         Start = start;
         End = end;
         Contains = contains;
         Max = max;
         IgnoreCase = ignoreCase;
+
+        var encoding = Encoding.ASCII;
+        StartBytes = encoding.GetBytes(Start);
+        StartLen = StartBytes.Length;
+        EndBytes = encoding.GetBytes(End);
+        EndLen = EndBytes.Length;
+        ContainsBytes = encoding.GetBytes(Contains);
 
         RegexOptions regexOptions = RegexOptions.Compiled | RegexOptions.CultureInvariant;
         if (IgnoreCase) regexOptions |= RegexOptions.IgnoreCase;

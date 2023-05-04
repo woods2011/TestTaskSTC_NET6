@@ -1,7 +1,5 @@
 using System.Text;
 using FluentAssertions;
-using TestTask2.Benchmarks.ObsoleteHtmlScannerCleanerImplementations;
-using Xunit.Abstractions;
 
 namespace TestTask2.UnitTests;
 

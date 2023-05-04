@@ -2,15 +2,21 @@ using System.Collections.Concurrent;
 using System.Text;
 using FluentAssertions;
 using TestTask1.StreamScanner;
+using TestTask1.UnitTests.Helpers;
+using Xunit.Abstractions;
 
 namespace TestTask1.UnitTests;
 
 public class DefaultStreamScannerTests
 {
-    private readonly ConcurrentBag<ScanMatch> _matches = new();
-    private void MatchHandler(ScanMatch match) => _matches.Add(match);
-
     private static readonly Random Rnd = Random.Shared;
+    private readonly ITestOutputHelper _testOutputHelper;
+
+    private readonly ConcurrentQueue<RangeMatch> _rangeMatches = new();
+
+    private void MatchHandler(RangeMatch rangeMatch) => _rangeMatches.Enqueue(rangeMatch);
+
+    public DefaultStreamScannerTests(ITestOutputHelper testOutputHelper) => _testOutputHelper = testOutputHelper;
 
 
     public static IEnumerable<object[]> GenericTestCases()
@@ -52,22 +58,42 @@ public class DefaultStreamScannerTests
     {
         // Arrange
         int max = rangeOfInterest.Length;
-        int expectedMatchCount = countMatchesInRanges;
+        const int expectedNumberOfValidRanges = 4;
+        int expectedMatchPerRangeCount = countMatchesInRanges;
 
-        var testData = $"some data {rangeOfInterest} some data";
-        MemoryStream memoryStream = ConvertStringToMemoryStreamAscii(testData);
+        var testData =
+            $"{rangeOfInterest}\r sme {start}ada{rangeOfInterest}{rangeOfInterest}\r{start}\r{end} \na {rangeOfInterest}";
 
-        var streamScanner = new DefaultStreamScanner(MatchHandler);
+        int chunkSize = Rnd.Next(1, testData.Length + 1);
+        Stream chunkedStream = ConvertStringToStreamAscii(testData, chunkSize);
+        int readBufferSize = Rnd.Next(1, testData.Length + 10);
+
+
+        _testOutputHelper.WriteLine($"{nameof(chunkSize)}: {chunkSize}");
+        _testOutputHelper.WriteLine($"{nameof(readBufferSize)}: {readBufferSize}");
+
+        var sut = new DefaultStreamScanner(MatchHandler);
 
         // Act
-        await streamScanner.ScanStreamAsync(
-            memoryStream,
-            new StreamScanParams(start, end, contains, template, max));
+        await sut.ScanStreamAsync(
+            chunkedStream,
+            new StreamScanParams(start, end, contains, template, max),
+            readBufferSize: readBufferSize);
 
         // Assert
-        _matches.Should().HaveCount(expectedMatchCount);
-        if (expectedMatchCount == 0) return;
-        _matches.Should().OnlyContain(match => match.MatchValue.Equals(matchedValue, StringComparison.Ordinal));
+        _rangeMatches.Should().HaveCount(expectedNumberOfValidRanges);
+
+        _rangeMatches.Should().AllSatisfy(match => match.RangeLength.Should().Be(rangeOfInterest.Length));
+        _rangeMatches.Should().AllSatisfy(match => match.ScanMatches.Should().HaveCount(expectedMatchPerRangeCount));
+
+        IEnumerable<ScanMatch> allScanMatches = _rangeMatches.SelectMany(rangeMatch => rangeMatch.ScanMatches);
+        var uniqueScanMatchesIndexes = _rangeMatches.First().ScanMatches.Select(match => match.MatchIndexInRange);
+
+        allScanMatches
+            .Should()
+            .OnlyContain(scanMatch => scanMatch.MatchValue.ToString().Equals(matchedValue, StringComparison.Ordinal))
+            .And
+            .AllSatisfy(scanMatch => scanMatch.MatchIndexInRange.Should().BeOneOf(uniqueScanMatchesIndexes));
     }
 
 
@@ -84,26 +110,35 @@ public class DefaultStreamScannerTests
     {
         // Arrange
         int max = rangeOfInterest.Length - 1;
-        int expectedMatchCount = 0;
+        const int expectedNumberOfValidRanges = 0;
 
-        var testData = $"some data {rangeOfInterest} some data";
-        MemoryStream memoryStream = ConvertStringToMemoryStreamAscii(testData);
+        var testData =
+            $"{rangeOfInterest} sme {start}ada{rangeOfInterest}{rangeOfInterest}a{start}d{end} \na {rangeOfInterest}";
 
-        var streamScanner = new DefaultStreamScanner(MatchHandler);
+        int chunkSize = Rnd.Next(1, testData.Length + 1);
+        Stream chunkedStream = ConvertStringToStreamAscii(testData, chunkSize);
+        int readBufferSize = Rnd.Next(1, testData.Length + 10);
+
+
+        _testOutputHelper.WriteLine($"{nameof(chunkSize)}: {chunkSize}");
+        _testOutputHelper.WriteLine($"{nameof(readBufferSize)}: {readBufferSize}");
+
+        var sut = new DefaultStreamScanner(MatchHandler);
 
         // Act
-        await streamScanner.ScanStreamAsync(
-            memoryStream,
-            new StreamScanParams(start, end, contains, template, max));
+        await sut.ScanStreamAsync(
+            chunkedStream,
+            new StreamScanParams(start, end, contains, template, max),
+            readBufferSize: readBufferSize);
 
         // Assert
-        _matches.Should().HaveCount(expectedMatchCount);
+        _rangeMatches.Should().HaveCount(expectedNumberOfValidRanges);
     }
 
 
     [Theory]
     [MemberData(nameof(GenericTestCases))]
-    public async Task ScanStreamAsync_ShouldCorrectlyDetectMatchingRanges_WhenBufferSizeIsEqualToOne(
+    public async Task ScanStreamAsync_ShouldCorrectlyDetectMatchingRanges_WhenStreamChunkSizeIsEqualToOne(
         string start,
         string end,
         string contains,
@@ -113,25 +148,41 @@ public class DefaultStreamScannerTests
         int countMatchesInRanges)
     {
         // Arrange
-        const int bufferSize = 1;
         int max = rangeOfInterest.Length;
-        int expectedMatchCount = countMatchesInRanges;
+        const int expectedNumberOfValidRanges = 4;
+        int expectedMatchPerRangeCount = countMatchesInRanges;
 
-        var testData = $"some data {rangeOfInterest} some data";
-        MemoryStream memoryStream = ConvertStringToMemoryStreamAscii(testData);
+        var testData =
+            $"{rangeOfInterest}\r sme {start}ada{rangeOfInterest}{rangeOfInterest}\r{start}\r{end} \na {rangeOfInterest}";
 
-        var streamScanner = new DefaultStreamScanner(MatchHandler);
+        Stream chunkedStream = ConvertStringToStreamAscii(testData, 1);
+        int readBufferSize = Rnd.Next(1, testData.Length + 10);
+
+
+        _testOutputHelper.WriteLine($"{nameof(readBufferSize)}: {readBufferSize}");
+
+        var sut = new DefaultStreamScanner(MatchHandler);
 
         // Act
-        await streamScanner.ScanStreamAsync(
-            memoryStream,
+        await sut.ScanStreamAsync(
+            chunkedStream,
             new StreamScanParams(start, end, contains, template, max),
-            bufferSize);
+            readBufferSize: readBufferSize);
 
         // Assert
-        _matches.Should().HaveCount(expectedMatchCount);
-        if (expectedMatchCount == 0) return;
-        _matches.Should().OnlyContain(match => match.MatchValue.Equals(matchedValue, StringComparison.Ordinal));
+        _rangeMatches.Should().HaveCount(expectedNumberOfValidRanges);
+
+        _rangeMatches.Should().AllSatisfy(match => match.RangeLength.Should().Be(rangeOfInterest.Length));
+        _rangeMatches.Should().AllSatisfy(match => match.ScanMatches.Should().HaveCount(expectedMatchPerRangeCount));
+
+        IEnumerable<ScanMatch> allScanMatches = _rangeMatches.SelectMany(rangeMatch => rangeMatch.ScanMatches);
+        var uniqueScanMatchesIndexes = _rangeMatches.First().ScanMatches.Select(match => match.MatchIndexInRange);
+
+        allScanMatches
+            .Should()
+            .OnlyContain(scanMatch => scanMatch.MatchValue.ToString().Equals(matchedValue, StringComparison.Ordinal))
+            .And
+            .AllSatisfy(scanMatch => scanMatch.MatchIndexInRange.Should().BeOneOf(uniqueScanMatchesIndexes));
     }
 
 
@@ -148,22 +199,43 @@ public class DefaultStreamScannerTests
     {
         // Arrange
         int max = rangeOfInterest.Length;
-        int expectedMatchCount = countMatchesInRanges;
+        const int expectedNumberOfValidRanges = 2;
+        int expectedMatchPerRangeCount = countMatchesInRanges;
 
-        var testDataAddOuterInterval = $"some data {start} {matchedValue} some data {rangeOfInterest} some data";
-        MemoryStream memoryStream = ConvertStringToMemoryStreamAscii(testDataAddOuterInterval);
+        var testDataAddOuterInterval =
+            $"{start} {matchedValue} some {rangeOfInterest} data {start} {matchedValue} {rangeOfInterest} {end} some data";
 
-        var streamScanner = new DefaultStreamScanner(MatchHandler);
+        int chunkSize = Rnd.Next(1, testDataAddOuterInterval.Length + 1);
+        Stream chunkedStream = ConvertStringToStreamAscii(testDataAddOuterInterval, chunkSize);
+        int readBufferSize = Rnd.Next(1, testDataAddOuterInterval.Length + 10);
+
+
+        _testOutputHelper.WriteLine($"{nameof(chunkSize)}: {chunkSize}");
+        _testOutputHelper.WriteLine($"{nameof(readBufferSize)}: {readBufferSize}");
+
+        var sut = new DefaultStreamScanner(MatchHandler);
 
         // Act
-        await streamScanner.ScanStreamAsync(
-            memoryStream,
-            new StreamScanParams(start, end, contains, template, max));
+        await sut.ScanStreamAsync(
+            chunkedStream,
+            new StreamScanParams(start, end, contains, template, max),
+            readBufferSize: readBufferSize);
+
 
         // Assert
-        _matches.Should().HaveCount(expectedMatchCount);
-        if (expectedMatchCount == 0) return;
-        _matches.Should().OnlyContain(match => match.MatchValue.Equals(matchedValue, StringComparison.Ordinal));
+        _rangeMatches.Should().HaveCount(expectedNumberOfValidRanges);
+
+        _rangeMatches.Should().AllSatisfy(match => match.RangeLength.Should().Be(rangeOfInterest.Length));
+        _rangeMatches.Should().AllSatisfy(match => match.ScanMatches.Should().HaveCount(expectedMatchPerRangeCount));
+
+        IEnumerable<ScanMatch> allScanMatches = _rangeMatches.SelectMany(rangeMatch => rangeMatch.ScanMatches);
+        var uniqueScanMatchesIndexes = _rangeMatches.First().ScanMatches.Select(match => match.MatchIndexInRange);
+
+        allScanMatches
+            .Should()
+            .OnlyContain(scanMatch => scanMatch.MatchValue.ToString().Equals(matchedValue, StringComparison.Ordinal))
+            .And
+            .AllSatisfy(scanMatch => scanMatch.MatchIndexInRange.Should().BeOneOf(uniqueScanMatchesIndexes));
     }
 
 
@@ -179,23 +251,33 @@ public class DefaultStreamScannerTests
         int countMatchesInRanges)
     {
         // Arrange
-        var forbiddenSymbol = GetRandomElement('\x00', '\x0d', '\x0a');
         int max = rangeOfInterest.Length;
-        int expectedMatchCount = 0;
+        const int expectedNumberOfValidRanges = 0;
 
-        rangeOfInterest = rangeOfInterest.Insert(Rnd.Next(0, rangeOfInterest.Length), forbiddenSymbol.ToString());
-        var testDataAddOuterInterval = $"some data {rangeOfInterest} some data";
-        MemoryStream memoryStream = ConvertStringToMemoryStreamAscii(testDataAddOuterInterval);
+        char forbiddenSymbol = Rnd.NextOneOf('\x00', '\x0d', '\x0a');
+        int insertIndex = Rnd.Next(1, rangeOfInterest.Length);
+        rangeOfInterest = rangeOfInterest.Insert(insertIndex, forbiddenSymbol.ToString());
 
-        var streamScanner = new DefaultStreamScanner(MatchHandler);
+        var testDataWithForbidden = $"some data {rangeOfInterest} some data{start}{matchedValue}{rangeOfInterest}";
+
+        int chunkSize = Rnd.Next(1, testDataWithForbidden.Length + 1);
+        Stream chunkedStream = ConvertStringToStreamAscii(testDataWithForbidden, chunkSize);
+        int readBufferSize = Rnd.Next(1, testDataWithForbidden.Length + 10);
+
+
+        _testOutputHelper.WriteLine($"{nameof(chunkSize)}: {chunkSize}");
+        _testOutputHelper.WriteLine($"{nameof(readBufferSize)}: {readBufferSize}");
+
+        var sut = new DefaultStreamScanner(MatchHandler);
 
         // Act
-        await streamScanner.ScanStreamAsync(
-            memoryStream,
-            new StreamScanParams(start, end, contains, template, max));
+        await sut.ScanStreamAsync(
+            chunkedStream,
+            new StreamScanParams(start, end, contains, template, max),
+            readBufferSize: readBufferSize);
 
         // Assert
-        _matches.Should().HaveCount(expectedMatchCount);
+        _rangeMatches.Should().HaveCount(expectedNumberOfValidRanges);
     }
 
 
@@ -213,20 +295,28 @@ public class DefaultStreamScannerTests
         // Arrange
         contains = $"not{contains}";
         int max = rangeOfInterest.Length;
-        int expectedMatchCount = 0;
+        const int expectedNumberOfValidRanges = 0;
 
-        var testDataAddOuterInterval = $"some data {rangeOfInterest} some data";
-        MemoryStream memoryStream = ConvertStringToMemoryStreamAscii(testDataAddOuterInterval);
+        var testData = $"some data {rangeOfInterest} some data{start}{matchedValue}{rangeOfInterest}";
 
-        var streamScanner = new DefaultStreamScanner(MatchHandler);
+        int chunkSize = Rnd.Next(1, testData.Length + 1);
+        Stream chunkedStream = ConvertStringToStreamAscii(testData, chunkSize);
+        int readBufferSize = Rnd.Next(1, testData.Length + 10);
+
+
+        _testOutputHelper.WriteLine($"{nameof(chunkSize)}: {chunkSize}");
+        _testOutputHelper.WriteLine($"{nameof(readBufferSize)}: {readBufferSize}");
+
+        var sut = new DefaultStreamScanner(MatchHandler);
 
         // Act
-        await streamScanner.ScanStreamAsync(
-            memoryStream,
-            new StreamScanParams(start, end, contains, template, max));
+        await sut.ScanStreamAsync(
+            chunkedStream,
+            new StreamScanParams(start, end, contains, template, max),
+            readBufferSize: readBufferSize);
 
         // Assert
-        _matches.Should().HaveCount(expectedMatchCount);
+        _rangeMatches.Should().HaveCount(expectedNumberOfValidRanges);
     }
 
 
@@ -244,23 +334,30 @@ public class DefaultStreamScannerTests
         // Arrange
         bool ignoreCase = false;
         int max = rangeOfInterest.Length;
-        int expectedMatchCount = 0;
+        const int expectedNumberOfValidRanges = 0;
 
-        var testDataAddOuterInterval = $"some data {rangeOfInterest} some data";
-        MemoryStream memoryStream = ConvertStringToMemoryStreamAscii(testDataAddOuterInterval);
+        var testData = $"some data {contains}{rangeOfInterest} some {rangeOfInterest}{end}data";
 
-        var streamScanner = new DefaultStreamScanner(MatchHandler);
+        int chunkSize = Rnd.Next(1, testData.Length + 1);
+        Stream chunkedStream = ConvertStringToStreamAscii(testData, chunkSize);
+        int readBufferSize = Rnd.Next(1, testData.Length + 10);
+
+
+        _testOutputHelper.WriteLine($"{nameof(chunkSize)}: {chunkSize}");
+        _testOutputHelper.WriteLine($"{nameof(readBufferSize)}: {readBufferSize}");
+
+        var sut = new DefaultStreamScanner(MatchHandler);
 
         // Act
-        await streamScanner.ScanStreamAsync(
-            memoryStream,
-            new StreamScanParams(start, end, contains, template, max, ignoreCase));
+        await sut.ScanStreamAsync(
+            chunkedStream,
+            new StreamScanParams(start, end, contains, template, max, ignoreCase),
+            readBufferSize: readBufferSize);
 
         // Assert
-        _matches.Should().HaveCount(expectedMatchCount);
+        _rangeMatches.Should().HaveCount(expectedNumberOfValidRanges);
     }
-
-
+    
     [Theory]
     [MemberData(nameof(TestCaseWithInversedCharacterCase))]
     public async Task ScanStreamAsync_ShouldDetectMatchingRanges_WhenCaseNotMatchedButScanningIsNotCaseSensitive(
@@ -275,22 +372,41 @@ public class DefaultStreamScannerTests
         // Arrange
         bool ignoreCase = true;
         int max = rangeOfInterest.Length;
-        int expectedMatchCount = countMatchesInRanges;
+        const int expectedNumberOfValidRanges = 2;
+        int expectedMatchPerRangeCount = countMatchesInRanges;
 
-        var testDataAddOuterInterval = $"some data {rangeOfInterest} some data";
-        MemoryStream memoryStream = ConvertStringToMemoryStreamAscii(testDataAddOuterInterval);
+        var testData = $"some data {contains}{rangeOfInterest} some {rangeOfInterest}{end}data";
 
-        var streamScanner = new DefaultStreamScanner(MatchHandler);
+        int chunkSize = Rnd.Next(1, testData.Length + 1);
+        Stream chunkedStream = ConvertStringToStreamAscii(testData, chunkSize);
+        int readBufferSize = Rnd.Next(1, testData.Length + 10);
+
+
+        _testOutputHelper.WriteLine($"{nameof(chunkSize)}: {chunkSize}");
+        _testOutputHelper.WriteLine($"{nameof(readBufferSize)}: {readBufferSize}");
+        
+        var sut = new DefaultStreamScanner(MatchHandler);
 
         // Act
-        await streamScanner.ScanStreamAsync(
-            memoryStream,
-            new StreamScanParams(start, end, contains, template, max, ignoreCase));
+        await sut.ScanStreamAsync(
+            chunkedStream,
+            new StreamScanParams(start, end, contains, template, max, ignoreCase),
+            readBufferSize: readBufferSize);
 
         // Assert
-        _matches.Should().HaveCount(expectedMatchCount);
-        if (expectedMatchCount == 0) return;
-        _matches.Should().OnlyContain(match => match.MatchValue.Equals(matchedValue, StringComparison.OrdinalIgnoreCase));
+        _rangeMatches.Should().HaveCount(expectedNumberOfValidRanges);
+
+        _rangeMatches.Should().AllSatisfy(match => match.RangeLength.Should().Be(rangeOfInterest.Length));
+        _rangeMatches.Should().AllSatisfy(match => match.ScanMatches.Should().HaveCount(expectedMatchPerRangeCount));
+
+        IEnumerable<ScanMatch> allScanMatches = _rangeMatches.SelectMany(rangeMatch => rangeMatch.ScanMatches);
+        var uniqueScanMatchesIndexes = _rangeMatches.First().ScanMatches.Select(match => match.MatchIndexInRange);
+
+        allScanMatches
+            .Should()
+            .OnlyContain(scanMatch => scanMatch.MatchValue.ToString().Equals(matchedValue, StringComparison.Ordinal))
+            .And
+            .AllSatisfy(scanMatch => scanMatch.MatchIndexInRange.Should().BeOneOf(uniqueScanMatchesIndexes));
     }
 
 
@@ -306,25 +422,26 @@ public class DefaultStreamScannerTests
         int countMatchesInRanges)
     {
         // Arrange
-        var streamsCount = Rnd.Next(1, 7);
         int max = rangeOfInterest.Length;
-        var expectedMatchCount = countMatchesInRanges * streamsCount;
 
-        var testDataAddOuterInterval = $"some data {start} someData {rangeOfInterest} some data";
-        var memoryStreams = Enumerable.Range(0, streamsCount)
-            .Select(_ => ConvertStringToMemoryStreamAscii(testDataAddOuterInterval));
+        var streamsCount = Rnd.Next(1, 7);
+        const int expectedNumberOfValidRangesInOneStream = 2;
+        var expectedNumberOfValidRanges = streamsCount * expectedNumberOfValidRangesInOneStream;
 
-        var streamScanner = new DefaultStreamScanner(MatchHandler);
+        var testData = $"some data {start} someData {rangeOfInterest} some {rangeOfInterest} data";
+
+        var memoryStreams = Enumerable.Range(0, streamsCount).Select(_ => ConvertStringToStreamAscii(testData));
+
+
+        var sut = new DefaultStreamScanner(MatchHandler);
 
         // Act
-        await streamScanner.ScanStreamsInParallelAsync(
+        await sut.ScanStreamsInParallelAsync(
             memoryStreams,
-            new StreamScanParams(start, end, contains, template, max, ignoreCase: false));
+            new StreamScanParams(start, end, contains, template, max));
 
         // Assert
-        _matches.Should().HaveCount(expectedMatchCount);
-        if (expectedMatchCount == 0) return;
-        _matches.Should().OnlyContain(match => match.MatchValue.Equals(matchedValue, StringComparison.Ordinal));
+        _rangeMatches.Should().HaveCount(expectedNumberOfValidRanges);
     }
 
 
@@ -345,15 +462,6 @@ public class DefaultStreamScannerTests
 
         return rangeStr;
     }
-
-    private static T GetRandomElement<T>(params T[] array) => array[Rnd.Next(array.Length)];
-
-    private static MemoryStream ConvertStringToMemoryStreamAscii(string testData)
-    {
-        byte[] testDataBytes = Encoding.ASCII.GetBytes(testData);
-        return new MemoryStream(testDataBytes);
-    }
-
 
     public static IEnumerable<object[]> TestCaseWithInversedCharacterCase()
     {
@@ -421,4 +529,16 @@ public class DefaultStreamScannerTests
             return new string(charArray);
         }
     }
+
+    private static Stream ConvertStringToStreamAscii(string testData, int chunkSize = -1)
+    {
+        byte[] testDataBytes = Encoding.ASCII.GetBytes(testData);
+        return chunkSize is -1
+            ? new MemoryStream(testDataBytes)
+            : new EmulateChunkedNonSeekableStream(testDataBytes, chunkSize);
+    }
 }
+
+// $"{rangeOfInterest}\r sme {start}ada{rangeOfInterest}{rangeOfInterest}\r{start}\r{end} \na {rangeOfInterest}";
+// $"{rangeOfInterest}\r sme {start}ada{rangeOfInterest.Replace("v1", "v2")}{rangeOfInterest.Replace("v1", "v3")}\r{start}\r{end} \na {rangeOfInterest.Replace("v1", "v4")}";
+// var testData = $"some data {start}{contains}{rangeOfInterest} some {rangeOfInterest}{end}data";
