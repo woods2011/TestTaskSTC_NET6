@@ -41,7 +41,7 @@ async Task MainFlow()
     {
         // fallBackFilePath,
         // Path.Combine(filesDirectoryPath, "TD1_200MB_FromGmail_RangeFrom1000to50000+.txt"),
-        Path.Combine(filesDirectoryPath, "TD2_200MB_LotsOfValidAndInvalidRanges.txt")
+        // Path.Combine(filesDirectoryPath, "TD2_200MB_LotsOfValidAndInvalidRanges.txt")
     };
 
     bool allFilesDoNotExist = AllFilesAtDefaultFilePathsDoNotExist();
@@ -49,14 +49,14 @@ async Task MainFlow()
     (StreamScanParams scanParams, bool shouldGenerateFile) = HandleInput();
 
     if (allFilesDoNotExist || shouldGenerateFile) GenerateFallbackFile();
-    FileStream[] streams = defaultFilePaths
+    List<FileStream> streams = defaultFilePaths
         .Distinct()
         .Where(File.Exists)
         // .Select(filePath => new EmulateChunkedNonSeekableStream(File.ReadAllBytes(filePath), 1));
         .Select(filePath => new FileStream(filePath, FileMode.Open, FileAccess.Read))
-        .ToArray();
+        .ToList();
 
-    Console.WriteLine($">>>Всего будет обработано: {streams.Length} файлов");
+    Console.WriteLine($">>>Всего будет обработано: {streams.Count} файлов");
 
     string outputFilePath = Path.Combine(filesDirectoryPath, "LastScanLog.txt");
     await using var matchesSubscriber = new MatchesReporterSubscriber(outputFilePath);
@@ -71,6 +71,11 @@ async Task MainFlow()
         bufferSize: 4096,
         CancellationToken.None);
 
+    
+    await matchesSubscriber.DisposeAsync();
+    streams.ForEach(stream => stream.Dispose());
+    Console.WriteLine($"{Environment.NewLine}Нажмите любую кнопку для выхода...");
+    Console.ReadKey();
 
     // -----------------------------------------------------------------------------------------------------------------
     bool AllFilesAtDefaultFilePathsDoNotExist()

@@ -12,11 +12,11 @@ public class IndexOfCharVsIndexOfBytesBenchmarks
     [Params(5, 25, 100, 200)]
     public int MatchSize { get; set; }
 
-    private byte[] _bytes;
-    private char[] _chars;
+    private byte[] _bytes = null!;
+    private char[] _chars = null!;
 
-    private byte[] _bytesToFind;
-    private char[] _charsToFind;
+    private byte[] _bytesToFind = null!;
+    private char[] _charsToFind = null!;
 
     [GlobalSetup]
     public void GlobalSetup()
@@ -49,26 +49,26 @@ public class IndexOfCharVsIndexOfBytesBenchmarks
     //     return _bytes.AsSpan().IndexOf(_bytesToFind[0]);
     // }
 
-    
+
     [Benchmark]
     public int MyIndexOfIgnoreCase_OnBytes()
     {
         return _bytes.AsSpan().IndexOf(_bytesToFind, ignoreCase: true);
     }
-    
+
     [Benchmark]
     public int MyIndexOf_OnBytes()
     {
         return _bytes.AsSpan().IndexOf(_bytesToFind, ignoreCase: false);
     }
-    
+
 
     [Benchmark]
     public int CompareInfoIndexOf_OnChars()
     {
         return MemoryExtensions.IndexOf(_chars, _charsToFind, StringComparison.Ordinal);
     }
-    
+
     //
     // [Benchmark]
     // public int CompareInfoIndexOf_OnChars_IgnoreCase()

@@ -37,7 +37,7 @@ public class OldStreamScanner : StreamScannerBase
             StreamScanParams scanParams,
             ReadOnlyMemory<char> partBuffer,
             StringComparison comparisonType,
-            Action<RangeMatch> matchNotifier)
+            Action<RangeMatch>? matchNotifier)
         {
             int startIndex = partBuffer.Span.IndexOf(scanParams.Start, comparisonType);
             if (startIndex == -1)
@@ -77,7 +77,7 @@ public class OldStreamScanner : StreamScannerBase
                 foreach (ValueMatch match in scanParams.Regex.EnumerateMatches(rangeAsString))
                     matches.Add(new ScanMatch(rangeAsString.AsMemory(match.Index, match.Length), match.Index));
 
-                matchNotifier.Invoke(new RangeMatch(matches, rangeAsString.Length));
+                matchNotifier?.Invoke(new RangeMatch(matches, rangeAsString.Length));
 
                 return true;
             }

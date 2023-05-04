@@ -33,15 +33,15 @@ public class StreamScannerBenchmarks
         await new SimpleGreedyStreamScanner().ScanStreamAsync(stream, testData.ScanParams, BufferSize);
     }
 
-    // [Benchmark]
-    // [ArgumentsSource(nameof(TestDataSets))]
-    // public async Task OldScanner(TestDataSet testData)
-    // {
-    //     // MemoryStream stream = testData.InMemoryVersion;
-    //     // stream.Position = 0;
-    //     await using FileStream stream = File.Open(testData.FilePath, FileMode.Open, FileAccess.Read);
-    //     await new OldStreamScanner().ScanStreamAsync(stream, testData.ScanParams, BufferSize);
-    // }
+    [Benchmark]
+    [ArgumentsSource(nameof(TestDataSets))]
+    public async Task OldScanner(TestDataSet testData)
+    {
+        // MemoryStream stream = testData.InMemoryVersion;
+        // stream.Position = 0;
+        await using FileStream stream = File.Open(testData.FilePath, FileMode.Open, FileAccess.Read);
+        await new OldStreamScanner().ScanStreamAsync(stream, testData.ScanParams, BufferSize);
+    }
 
 
     public static IEnumerable<TestDataSet> TestDataSets()

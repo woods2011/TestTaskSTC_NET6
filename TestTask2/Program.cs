@@ -14,9 +14,12 @@ if (!File.Exists(inputFilePath)) File.WriteAllText(inputFilePath, fallbackData, 
 
 string outputFilePath = Path.Combine(inputFileDirectory, "indexResult.txt");
 
-await using var inputStream = new FileStream(inputFilePath, FileMode.Open, FileAccess.Read);
-await using var outputStream = new FileStream(outputFilePath, FileMode.Create, FileAccess.Write);
+await using (var inputStream = new FileStream(inputFilePath, FileMode.Open, FileAccess.Read))
+await using (var outputStream = new FileStream(outputFilePath, FileMode.Create, FileAccess.Write))
+    await NewHtmlStreamCleaner.RemoveHtmlTagsFromStreamAsync(inputStream, outputStream, encoding: defaultEncoding);
 
-await NewHtmlStreamCleaner.RemoveHtmlTagsFromStreamAsync(inputStream, outputStream, encoding: defaultEncoding);
+Console.WriteLine($"Оригинальный HTML находится в файле: {Path.GetFullPath(inputFilePath)}");
+Console.WriteLine($"Результат обработки записан в файл: {Path.GetFullPath(outputFilePath)}");
 
-Console.WriteLine($"Результат записан в файл: {Path.GetFullPath(outputFilePath)}");
+Console.WriteLine($"{Environment.NewLine}Нажмите любую кнопку для выхода...");
+Console.ReadKey();
