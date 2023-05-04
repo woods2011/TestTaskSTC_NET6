@@ -84,7 +84,7 @@ public class StreamScannerBenchmarks
         const string testCase2BaseName = "TD2_200МБ_ОченьМногоДиапазонов(Валидных<Невалидных)";
         string testCase2FilePath = Path.Combine(filesDirectoryPath, "TD2_200MB_LotsOfValidAndInvalidRanges.txt");
 
-        // if (!File.Exists(testCase2FilePath)) // Закомментировать если необходимо чтобы создавался новый файл
+        if (!File.Exists(testCase2FilePath)) // Закомментировать если необходимо чтобы создавался новый файл
         {
             TestDataProvider.GenerateFullyRandomTestData(
                 matchedValue: "+1 (555) 123-4567",
@@ -93,7 +93,6 @@ public class StreamScannerBenchmarks
                 containsMarker: streamScanParams.Contains,
                 filePath: testCase2FilePath,
                 fileSizeInMegaBytes: 200,
-                dataInsertPerByteProbability: 1e-2,
                 rndSeed: randomSeedValue); // Передать null для Random.Shared
         }
 
@@ -108,9 +107,10 @@ public class StreamScannerBenchmarks
     }
 }
 
-// [DebuggerStepThrough]
 // string start = "START";
 // string end = "END";
 // string contains = "CONTAINS";
 // int max = 1000;
 // bool ignoreCase = true;
+
+// [DebuggerStepThrough]

@@ -1,8 +1,8 @@
 ﻿using System.Text;
 
-namespace TestTask2;
+namespace TestTask2.Benchmarks.ObsoleteHtmlScannerCleanerImplementations;
 
-public static class HtmlStreamCleaner
+public static class OldHtmlStreamCleaner
 {
     public static async Task RemoveHtmlTagsFromStreamAsync(
         Stream inputStream,

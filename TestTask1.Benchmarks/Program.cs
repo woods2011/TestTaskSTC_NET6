@@ -11,8 +11,8 @@ IConfig defaultConfig = DefaultConfig.Instance;
 
 IConfig config = defaultConfig
     .WithSummaryStyle(DefaultConfig.Instance.SummaryStyle.WithMaxParameterColumnWidth(75))
-    .AddJob(Job.ShortRun)
-    // .AddJob(Job.MediumRun)
+    // .AddJob(Job.ShortRun)
+    .AddJob(Job.MediumRun)
     .AddExporter(MarkdownExporter.GitHub);
 
 BenchmarkRunner.Run<StreamScannerBenchmarks>(config);

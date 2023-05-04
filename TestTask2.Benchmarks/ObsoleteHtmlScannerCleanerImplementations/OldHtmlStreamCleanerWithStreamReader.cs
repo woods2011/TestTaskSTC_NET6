@@ -5,7 +5,7 @@ namespace TestTask2.Benchmarks.ObsoleteHtmlScannerCleanerImplementations;
 /// <summary>
 /// Класс предназначеный для удаления HTML-тегов из потока.
 /// </summary>
-public static class HtmlStreamCleanerWithStreamReader
+public static class OldHtmlStreamCleanerWithStreamReader
 {
     /// <summary>
     /// Асинхронно удаляет HTML-теги из входного потока и записывает результат в выходной поток.
