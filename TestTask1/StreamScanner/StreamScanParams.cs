@@ -9,15 +9,16 @@ public class StreamScanParams
     public string Contains { get; }
     public int Max { get; }
     public bool IgnoreCase { get; }
+    public string? Path { get; set; }
     public Regex Regex { get; }
 
-    public StreamScanParams(
-        string start,
+    public StreamScanParams(string start,
         string end,
         string contains,
         string template,
         int max,
-        bool ignoreCase = false)
+        bool ignoreCase = false,
+        string? path = null)
     {
         ValidateArgumentForLengthFrom2To63(start, nameof(start));
         ValidateArgumentForLengthFrom2To63(end, nameof(end));
@@ -30,6 +31,7 @@ public class StreamScanParams
         Contains = contains;
         Max = max;
         IgnoreCase = ignoreCase;
+        Path = path;
 
         RegexOptions regexOptions = RegexOptions.Compiled | RegexOptions.CultureInvariant;
         if (IgnoreCase) regexOptions |= RegexOptions.IgnoreCase;
