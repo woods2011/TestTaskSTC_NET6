@@ -1,11 +1,9 @@
 using System.Text;
 using FluentAssertions;
-using TestTask2.Benchmarks.ObsoleteHtmlScannerCleanerImplementations;
-using Xunit.Abstractions;
 
 namespace TestTask2.UnitTests;
 
-public class HtmlStreamCleanerTests
+public class HtmlStreamCleaner2Tests
 {
     [Theory]
     [MemberData(nameof(GenericTestCases))]
@@ -14,13 +12,35 @@ public class HtmlStreamCleanerTests
         string expectedResult)
     {
         // Arrange
-        var encoding = new UTF8Encoding(false);
+        var encoding = Encoding.UTF8;
 
         var inputStream = new MemoryStream(encoding.GetBytes(htmlContent));
         var outputStream = new MemoryStream();
 
         // Act
-        await HtmlStreamCleaner.RemoveHtmlTagsFromStreamAsync(inputStream, outputStream, encoding: encoding);
+        await NewHtmlStreamCleaner.RemoveHtmlTagsFromStreamAsync(inputStream, outputStream, encoding: encoding);
+
+        // Assert
+        var result = encoding.GetString(outputStream.ToArray());
+        result.Should().BeEquivalentTo(expectedResult);
+    }
+    
+    
+    [Theory]
+    [MemberData(nameof(GenericTestCases))]
+    public async Task RemoveHtmlTagsFromStreamAsync_ShouldRemoveHtmlTagsCorrectly_WhenEncodingIsTwoBytesAtLeast(
+        string htmlContent,
+        string expectedResult)
+    {
+        // Arrange
+        var bufferSize = 3;
+        var encoding = Encoding.UTF32;
+
+        var inputStream = new MemoryStream(encoding.GetBytes(htmlContent));
+        var outputStream = new MemoryStream();
+
+        // Act
+        await NewHtmlStreamCleaner.RemoveHtmlTagsFromStreamAsync(inputStream, outputStream, bufferSize, encoding: encoding);
 
         // Assert
         var result = encoding.GetString(outputStream.ToArray());
@@ -42,7 +62,8 @@ public class HtmlStreamCleanerTests
         var outputStream = new MemoryStream();
 
         // Act
-        await HtmlStreamCleaner.RemoveHtmlTagsFromStreamAsync(inputStream, outputStream, bufferSize, encoding);
+        await NewHtmlStreamCleaner.RemoveHtmlTagsFromStreamAsync(
+            inputStream, outputStream, bufferSize, encoding: encoding);
 
         // Assert
         var result = encoding.GetString(outputStream.ToArray());
@@ -65,7 +86,7 @@ public class HtmlStreamCleanerTests
         var outputStream = new MemoryStream();
 
         // Act
-        await HtmlStreamCleaner.RemoveHtmlTagsFromStreamAsync(inputStream, outputStream, encoding: encoding);
+        await NewHtmlStreamCleaner.RemoveHtmlTagsFromStreamAsync(inputStream, outputStream, encoding: encoding);
 
         // Assert
         var result = encoding.GetString(outputStream.ToArray());

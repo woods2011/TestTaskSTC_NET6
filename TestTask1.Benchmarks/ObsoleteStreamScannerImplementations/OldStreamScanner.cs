@@ -1,24 +1,25 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.RegularExpressions;
 using TestTask1.Helpers;
 using TestTask1.StreamScanner;
 
 namespace TestTask1.Benchmarks.ObsoleteStreamScannerImplementations;
 
-public class StreamScannerWithStreamReader : StreamScannerBase
+public class OldStreamScanner : StreamScannerBase
 {
-    public StreamScannerWithStreamReader(Action<ScanMatch>? matchNotifier = null) : base(matchNotifier) { }
-    
+    /// <inheritdoc/>
+    public OldStreamScanner(Action<RangeMatch>? matchNotifier = null) : base(matchNotifier) { }
+
+    /// <inheritdoc/>
     public override async Task ScanStreamAsync(
         Stream stream,
         StreamScanParams scanParams,
-        int bufferSize = 4096,
+        int readBufferSize = 4096,
         CancellationToken token = default)
     {
-        var readBuffer = new char[Encoding.ASCII.GetMaxCharCount(bufferSize)];
-        int charsRead;
-        var streamReader = new StreamReader(
-            stream, Encoding.ASCII, detectEncodingFromByteOrderMarks: false, bufferSize);
+        Encoding encoding = Encoding.ASCII; // т.к. кодировка 1 байт не нужно хранить encoding.GetDecoder();
+        var readBuffer = new byte[readBufferSize];
+        int bytesRead;
 
         StringComparison comparisonType = scanParams.IgnoreCase
             ? StringComparison.OrdinalIgnoreCase
@@ -26,17 +27,17 @@ public class StreamScannerWithStreamReader : StreamScannerBase
 
         var partBuffer = ReadOnlyMemory<char>.Empty;
 
-        while ((charsRead = await streamReader.ReadAsync(readBuffer, token)) > 0)
+        while ((bytesRead = await stream.ReadAsync(readBuffer, token)) > 0)
         {
-            partBuffer = String.Concat(partBuffer.Span, readBuffer.AsSpan(0, charsRead)).AsMemory();
-            partBuffer =  ScanPart(scanParams, partBuffer, comparisonType, MatchNotifier);
+            partBuffer = String.Concat(partBuffer.Span, encoding.GetString(readBuffer, 0, bytesRead)).AsMemory();
+            partBuffer = ScanPart(scanParams, partBuffer, comparisonType, MatchNotifier);
         }
 
         static ReadOnlyMemory<char> ScanPart(
             StreamScanParams scanParams,
             ReadOnlyMemory<char> partBuffer,
             StringComparison comparisonType,
-            Action<ScanMatch> matchNotifier)
+            Action<RangeMatch>? matchNotifier)
         {
             int startIndex = partBuffer.Span.IndexOf(scanParams.Start, comparisonType);
             if (startIndex == -1)
@@ -69,9 +70,14 @@ public class StreamScannerWithStreamReader : StreamScannerBase
 
                 bool isContainsPresent = rangeData.Contains(scanParams.Contains, comparisonType);
                 if (!isContainsPresent) return false;
+                
+                var rangeAsString = rangeData.ToString();
+                
+                var matches = new List<ScanMatch>();
+                foreach (ValueMatch match in scanParams.Regex.EnumerateMatches(rangeAsString))
+                    matches.Add(new ScanMatch(rangeAsString.AsMemory(match.Index, match.Length), match.Index));
 
-                foreach (Match match in scanParams.Regex.Matches(rangeData.ToString()))
-                    matchNotifier(new ScanMatch(match.Value, rangeData.Length, match.Index));
+                matchNotifier?.Invoke(new RangeMatch(matches, rangeAsString.Length));
 
                 return true;
             }

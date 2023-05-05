@@ -8,32 +8,26 @@ namespace TestTask2.Benchmarks;
 [MemoryDiagnoser]
 public class HtmlStreamCleanerBenchmarks
 {
-    [Params(256, 1024)]
+    [Params(256, 1024, 4096)]
     public int BufferSize { get; set; }
 
-
+    
     [Benchmark(Baseline = true)]
     [ArgumentsSource(nameof(TestDataSets))]
-    [DebuggerStepThrough]
-    public async Task StreamCleanerWithoutStreamReader(TestDataSet testData)
+    public async Task NewStreamCleaner(TestDataSet testData)
     {
         testData.InputStream.Position = 0;
-        var outputStream = new MemoryStream();
-
-        await HtmlStreamCleaner.RemoveHtmlTagsFromStreamAsync(testData.InputStream, outputStream, BufferSize);
+        await NewHtmlStreamCleaner.RemoveHtmlTagsFromStreamAsync(testData.InputStream, new MemoryStream(), BufferSize);
     }
-
+    
     [Benchmark]
     [ArgumentsSource(nameof(TestDataSets))]
-    public async Task StreamCleanerWithStreamReader(TestDataSet testData)
+    public async Task OldStreamCleaner(TestDataSet testData)
     {
         testData.InputStream.Position = 0;
-        var outputStream = new MemoryStream();
-
-        await HtmlStreamCleanerWithStreamReader.RemoveHtmlTagsFromStreamAsync(
-            testData.InputStream, outputStream, BufferSize);
+        await OldHtmlStreamCleaner.RemoveHtmlTagsFromStreamAsync(testData.InputStream, new MemoryStream(), BufferSize);
     }
-
+    
 
     public static IEnumerable<TestDataSet> TestDataSets()
     {
@@ -47,10 +41,4 @@ public class HtmlStreamCleanerBenchmarks
     {
         public override string ToString() => $"{BaseName}: ({InputStream.ToArray().Length} bytes)";
     }
-}
-
-internal static class StringHelpers
-{
-    public static string Repeat(this string value, int count) =>
-        new StringBuilder(count * value.Length).Insert(0, value, count).ToString();
 }

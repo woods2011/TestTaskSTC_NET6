@@ -19,4 +19,23 @@ public static class StringExtensions
 
         return startIndex + indexInSlice;
     }
+    
+    public static int IndexOf(
+        this ReadOnlySpan<byte> span,
+        byte value,
+        int startIndex)
+    {
+        int indexInSlice = span.Slice(startIndex).IndexOf(value);
+
+        if (indexInSlice == -1) return -1;
+
+        return startIndex + indexInSlice;
+    }
+    
+    
+    public static Memory<T> CopyToAndFitDest<T>(this ReadOnlySpan<T> source, Memory<T> destination)
+    {
+        source.CopyTo(destination.Span);
+        return destination.Slice(0, source.Length);
+    }
 }
