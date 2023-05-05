@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System.Diagnostics;
+using System.Text;
 using TestTask1;
 using TestTask1.StreamScanner;
 using TestTask1.TestFiles;
@@ -63,6 +64,11 @@ async Task MainFlow()
         .Select(filePath => new FileStream(filePath, FileMode.Open, FileAccess.Read))
         .ToList();
 
+    // Stream to = File.OpenWrite("/Volumes/SONY ALPHA/test/test2.xml");
+    // var w = Stopwatch.StartNew(); 
+    // streams[0].CopyTo(to);
+    // w.Stop();
+    
     Console.WriteLine($">>>Всего будет обработано: {streams.Count} файлов");
 
     string outputFilePath = Path.Combine(filesDirectoryPath, "LastScanLog.txt");
