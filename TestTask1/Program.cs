@@ -48,7 +48,14 @@ async Task MainFlow()
 
     (StreamScanParams scanParams, bool shouldGenerateFile) = HandleInput();
 
-    if (allFilesDoNotExist || shouldGenerateFile) GenerateFallbackFile();
+    if (
+        //allFilesDoNotExist ||  //TEMPORARY
+        shouldGenerateFile) GenerateFallbackFile();
+    if (scanParams.Path != null)
+    {
+        defaultFilePaths = defaultFilePaths.Concat(new string[] {scanParams.Path}).ToArray();
+
+    }
     List<FileStream> streams = defaultFilePaths
         .Distinct()
         .Where(File.Exists)
@@ -65,11 +72,17 @@ async Task MainFlow()
     //                         new SimpleGreedyStreamScanner(matchesSubscriber.MatchHandler)
     var defaultStreamScanner = new DefaultStreamScanner(matchesSubscriber.MatchHandler);
 
+    DateTime Start = DateTime.Now;
+    Console.WriteLine("START: " + Start);
     await defaultStreamScanner.ScanStreamsInParallelAsync(
         streams: streams,
         scanParams,
         bufferSize: 4096,
         CancellationToken.None);
+    DateTime end = DateTime.Now;
+    Console.WriteLine("END: " + end);
+    Console.WriteLine("Time: " + (end -Start).TotalMilliseconds + " ms");
+    Console.WriteLine($"Результат записан в файл: {Path.GetFullPath(outputFilePath)}");
 
     
     await matchesSubscriber.DisposeAsync();
@@ -86,29 +99,36 @@ async Task MainFlow()
 
     static (StreamScanParams, bool) HandleInputCore()
     {
-        Console.Write("Введите start: ");
-        string start = Console.ReadLine() ?? string.Empty;
-
-        Console.Write("Введите end: ");
-        string end = Console.ReadLine() ?? string.Empty;
-
-        Console.Write("Введите contains: ");
-        string contains = Console.ReadLine() ?? string.Empty;
-
-        Console.Write("Введите template: ");
-        string template = Console.ReadLine() ?? string.Empty;
-
-        Console.Write("Введите max: ");
-        int max = int.Parse(Console.ReadLine() ?? string.Empty);
-
-
-        Console.Write("Сгенерировать файл автоматически? (y/n): ");
-        string generateFileStr = Console.ReadLine() ?? string.Empty;
-        bool shouldGenerateFile = generateFileStr.Equals("y", StringComparison.InvariantCultureIgnoreCase);
-
+        // Console.Write("Введите start: ");
+        // string start = Console.ReadLine() ?? string.Empty;
+        //
+        // Console.Write("Введите end: ");
+        // string end = Console.ReadLine() ?? string.Empty;
+        //
+        // Console.Write("Введите contains: ");
+        // string contains = Console.ReadLine() ?? string.Empty;
+        //
+        // Console.Write("Введите template: ");
+        // string template = Console.ReadLine() ?? string.Empty;
+        //
+        // Console.Write("Введите max: ");
+        // int max = int.Parse(Console.ReadLine() ?? string.Empty);
+        //
+        //
+        // Console.Write("Сгенерировать файл автоматически? (y/n): ");
+        // string generateFileStr = Console.ReadLine() ?? string.Empty;
+        bool shouldGenerateFile = false;// generateFileStr.Equals("y", StringComparison.InvariantCultureIgnoreCase);
+        var args = Environment.GetCommandLineArgs();
+        string start = args[1];
+        string end = args[2];
+        string contains = args[3];
+        string template = args[4];
+        int max = Int32.Parse(args[5]);
+        string path = args[6];
+        
         Console.WriteLine();
 
-        var streamScanParams = new StreamScanParams(start, end, contains, template, max, ignoreCase: false);
+        var streamScanParams = new StreamScanParams(start, end, contains, template, max, ignoreCase: false, path: path);
         return (streamScanParams, shouldGenerateFile);
     }
 

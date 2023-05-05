@@ -286,7 +286,11 @@ public class DefaultStreamScanner : StreamScannerBase
 
         bool RangeIncludesForbiddenSymbol(ReadOnlyMemory<byte> rangeData, out int index)
         {
-            index = rangeData.Span.IndexOfAny(Nul, Cr, Lf);
+            index = rangeData.Span.IndexOfAny(Nul, (byte)'\t');
+            if (index > -1)
+            {
+                
+            }
             return index is not -1;
         }
 

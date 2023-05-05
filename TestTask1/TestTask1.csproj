@@ -12,4 +12,10 @@
         <InternalsVisibleTo Include="TestTask1.IntegrationTests" />
     </ItemGroup>
 
+    <ItemGroup>
+      <None Update="data.xml">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </None>
+    </ItemGroup>
+
 </Project>
