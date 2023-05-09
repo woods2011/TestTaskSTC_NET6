@@ -19,7 +19,9 @@ async Task MainFlow()
     {
         // fallBackFilePath,
         // Path.Combine(filesDirectoryPath, "TD1_200MB_FromGmail_RangeFrom1000to50000+.txt"),
-        // Path.Combine(filesDirectoryPath, "TD2_200MB_LotsOfValidAndInvalidRanges.txt")
+        // Path.Combine(filesDirectoryPath, "TD2_200MB_LotsOfValidAndInvalidRanges.txt"),
+
+        // Template for not fallBack: (\+\d{1,2}\s?)?(\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}
     };
     bool allFilesDoNotExist = AllFilesAtDefaultFilePathsDoNotExist();
 
@@ -68,7 +70,8 @@ async Task MainFlow()
     watch.Stop();
     Console.WriteLine($"END: {DateTime.Now:hh:mm:ss.fff}");
     Console.WriteLine($"Time: {watch.Elapsed.TotalMilliseconds} ms");
-    Console.WriteLine($"Результат записан в файл: {Path.GetFullPath(outputFilePath)}");
+    Console.WriteLine($"Результат записан в файл:{Environment.NewLine}" +
+                      $"\t{Path.GetFullPath(outputFilePath)}");
 
     await matchesSubscriber.DisposeAsync();
     streams.ForEach(stream => stream.Dispose());
@@ -90,11 +93,17 @@ async Task MainFlow()
 
     StreamScanParams HandleCmdArgsInput()
     {
+        if (args.Length <= 5)
+        {
+            Console.WriteLine("Недостаточное число аргументов командной строки");
+            Console.ReadKey();
+        }
+        
         string filePath = args[5];
-        if (!File.Exists(filePath)) 
+        if (!File.Exists(filePath))
             Console.WriteLine($"!!!Указанный файл не существует: {Path.GetFullPath(filePath)}{Environment.NewLine}");
-
-        return new(
+        
+        return new StreamScanParams(
             start: args[0],
             end: args[1],
             contains: args[2],
@@ -135,7 +144,9 @@ async Task MainFlow()
         {
             try
             {
-                return HandleConsoleInputCore();
+                (StreamScanParams, bool) handleConsoleInputCore = HandleConsoleInputCore();
+                Console.WriteLine();
+                return handleConsoleInputCore;
             }
             catch (Exception e)
             {
@@ -188,6 +199,8 @@ void GenerateDataFlow()
     //     containsMarker: "CONTAINS",
     //     filePath: Path.Combine(filesDirectoryPath, "TD2_200MB_LotsOfValidAndInvalidRanges.txt"),
     //     fileSizeInMegaBytes: 200);
+
+    Console.ReadKey();
 }
 
 
