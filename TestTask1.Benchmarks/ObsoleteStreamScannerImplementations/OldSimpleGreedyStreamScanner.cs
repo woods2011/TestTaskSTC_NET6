@@ -1,13 +1,14 @@
 ﻿using System.Buffers;
 using System.Text.RegularExpressions;
 using TestTask1.Helpers;
+using TestTask1.StreamScanner;
 
-namespace TestTask1.StreamScanner;
+namespace TestTask1.Benchmarks.ObsoleteStreamScannerImplementations;
 
-public class SimpleGreedyStreamScanner : StreamScannerBase
+public class OldSimpleGreedyStreamScanner : StreamScannerBase
 {
     /// <inheritdoc/>
-    public SimpleGreedyStreamScanner(Action<RangeMatch>? matchNotifier = null) : base(matchNotifier) { }
+    public OldSimpleGreedyStreamScanner(Action<RangeMatch>? matchNotifier = null) : base(matchNotifier) { }
 
 
     /// <inheritdoc/>
@@ -101,14 +102,14 @@ public class SimpleGreedyStreamScanner : StreamScannerBase
 
             if (RangeIsNotValidLength(scanParams.StartLen + savedRangeParts.TotalLen + indexOfEnd + scanParams.EndLen))
             {
-                int remainLength = Math.Min(scanParams.Max, indexOfEnd);
+                var remainLength = Math.Min(scanParams.Max, indexOfEnd);
                 FindingStartInRemainData(dataPart.Slice(indexOfEnd - remainLength));
                 return;
             }
 
-            savedRangeParts.ConstructRangeAndProcess(
-                scanParams.StartBytes, dataPart[..(indexOfEnd + scanParams.EndLen)],
-                ProcessRange);
+            ReadOnlyMemory<byte> constructedRange = savedRangeParts
+                .ConstructRange(scanParams.StartBytes, dataPart[..(indexOfEnd + scanParams.EndLen)]);
+            ProcessRange(constructedRange);
 
             FindingStartInRemainData(dataPart[(indexOfEnd + scanParams.EndLen)..]);
             return;
@@ -150,9 +151,6 @@ public class SimpleGreedyStreamScanner : StreamScannerBase
         {
             if (RangeDoNotIncludesContains(rangeData)) return;
 
-            // Тут тоже можно использовать массив из пула, но тогда нельзя использовать ValueMatch, т.к. будем ссылаться
-            // на память которая будет перезаписана, следовательно если совпадений в диапазоне мало, а сам диапазон
-            // большой лучше использовать массив из пула и обычный Match, иначе ValueMatch
             char[] range = AsciiHelpers.ConvertToChars(rangeData.Span);
 
             var matches = new List<ScanMatch>();
@@ -167,20 +165,21 @@ public class SimpleGreedyStreamScanner : StreamScannerBase
 
         bool RangeIncludesForbiddenSymbol(ReadOnlyMemory<byte> rangeData, out int index)
         {
-            // Вообще говоря лучше вынести запретные символы в ScanParams
-            // index = rangeData.Span.IndexOfAny(Nul, Cr, Lf);
-            index = rangeData.Span.IndexOfAny(Nul, Tab);
+            index = rangeData.Span.IndexOfAny(Nul, Cr, Lf);
             return index is not -1;
         }
 
         bool RangeDoNotIncludesContains(ReadOnlyMemory<byte> rangeData) =>
             rangeData.Span.IndexOf(scanParams.ContainsBytes, scanParams.IgnoreCase) is -1;
+
+        int IndexOfAnyForbiddenSymbols(ReadOnlyMemory<byte> rangeData) =>
+            rangeData.Span.IndexOfAny(Nul, Cr, Lf);
     }
 
 
     private class SimpleRangePartsAggregator
     {
-        private readonly ArrayPool<byte> _arrayPool = ArrayPool<byte>.Shared;
+        private readonly ArrayPool<byte> _arrayPool;
         private readonly List<byte[]> _rentedArrays = new();
         private readonly int _rangePartReadBufferSize;
 
@@ -188,7 +187,11 @@ public class SimpleGreedyStreamScanner : StreamScannerBase
 
         public SimpleRangePartsAggregator(int baseBufferSize, StreamScanParams scanParams)
         {
+            int maxRangeLenForBuckets = Math.Min(scanParams.Max, 8 * 1024 * 1024);
             _rangePartReadBufferSize = baseBufferSize + Math.Max(scanParams.StartLen, scanParams.EndLen);
+            _arrayPool =
+                ArrayPool<byte>.Create(_rangePartReadBufferSize, maxRangeLenForBuckets / _rangePartReadBufferSize + 2);
+
             CurrentReadBuffer = _arrayPool.Rent(_rangePartReadBufferSize);
         }
 
@@ -216,25 +219,14 @@ public class SimpleGreedyStreamScanner : StreamScannerBase
             _rangeParts.Clear();
         }
 
-        public void ConstructRangeAndProcess(
-            ReadOnlyMemory<byte> firstPart,
-            ReadOnlyMemory<byte> lastPart,
-            Action<ReadOnlyMemory<byte>> rangeProcessor)
-        {
-            byte[] constructRangeBuffer = ArrayPool<byte>.Shared.Rent(firstPart.Length + TotalLen + lastPart.Length);
-
-            ReadOnlyMemory<byte> range =
-                MemoryHelpers.JoinMemory(firstPart, _rangeParts, lastPart, constructRangeBuffer);
-            rangeProcessor(range);
-
-            ArrayPool<byte>.Shared.Return(constructRangeBuffer);
-        }
+        public Memory<byte> ConstructRange(ReadOnlyMemory<byte> firstPart, ReadOnlyMemory<byte> lastPart) =>
+            MemoryHelpers.JoinMemory(firstPart, _rangeParts, lastPart);
     }
+
 
     private const byte Nul = 0;
     private const byte Lf = 10;
     private const byte Cr = 13;
-    private const byte Tab = (byte) '\t';
 }
 
 // reader.AdvanceTo(dataSequence.End);

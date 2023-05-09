@@ -36,6 +36,9 @@ public static class StringExtensions
     public static Memory<T> CopyToAndFitDest<T>(this ReadOnlySpan<T> source, Memory<T> destination)
     {
         source.CopyTo(destination.Span);
-        return destination.Slice(0, source.Length);
+        return destination[..source.Length];
     }
+
+    public static Memory<T> CopyToAndFitDest<T>(this ReadOnlyMemory<T> source, Memory<T> destination) =>
+        CopyToAndFitDest(source.Span, destination);
 }

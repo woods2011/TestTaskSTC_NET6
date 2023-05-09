@@ -13,28 +13,6 @@ await MainFlow(); // Для того чтобы можно было быстро
 // GenerateDataFlow();
 
 
-void GenerateDataFlow()
-{
-    // Template: (\+\d{1,2}\s?)?(\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}               | Regex для номера телефона (US)
-
-    TestDataProvider.GenerateTestDataFromVasheGmailPismo(
-        matchedValue: "+1 (555) 123-4567",
-        startMarker: "START",
-        endMarker: "ENDING",
-        containsMarker: "CONTAINS",
-        filePath: Path.Combine(filesDirectoryPath, "TD1_200MB_FromGmail_RangeFrom1000to50000+.txt"),
-        fileSizeInMegaBytes: 200);
-
-    // TestDataProvider.GenerateFullyRandomTestData(
-    //     matchedValue: "+1 (555) 123-4567",
-    //     startMarker: "START",
-    //     endMarker: "ENDING",
-    //     containsMarker: "CONTAINS",
-    //     filePath: Path.Combine(filesDirectoryPath, "TD2_200MB_LotsOfValidAndInvalidRanges.txt"),
-    //     fileSizeInMegaBytes: 200);
-}
-
-// ---------------------------------------------------------------------------------------------------------------------
 async Task MainFlow()
 {
     List<string> defaultFilePaths = new()
@@ -46,14 +24,14 @@ async Task MainFlow()
     bool allFilesDoNotExist = AllFilesAtDefaultFilePathsDoNotExist();
 
     // 1. Ввод с консоли
-    // (StreamScanParams scanParams, bool shouldGenerateFile) = HandleInput();
+    // (StreamScanParams scanParams, bool shouldGenerateFile) = HandleConsoleInput();
     // if (allFilesDoNotExist || shouldGenerateFile) GenerateFallbackFile(!shouldGenerateFile);
 
     // 2. Захардкоженные данные
     // StreamScanParams scanParams = HandleManualInput();
 
     // 3. Из коммандной строки
-    StreamScanParams scanParams = HandleInputFromCmdArgs();
+    StreamScanParams scanParams = HandleCmdArgsInput();
 
     if (scanParams.Path != null) defaultFilePaths.Add(scanParams.Path);
 
@@ -64,22 +42,22 @@ async Task MainFlow()
         .Select(filePath => new FileStream(filePath, FileMode.Open, FileAccess.Read))
         .ToList();
 
+    // ???
     // Stream to = File.OpenWrite("/Volumes/SONY ALPHA/test/test2.xml");
     // var w = Stopwatch.StartNew(); 
     // streams[0].CopyTo(to);
     // w.Stop();
 
-    Console.WriteLine($">>>Всего будет обработано: {streams.Count} файлов");
 
     string outputFilePath = Path.Combine(filesDirectoryPath, "LastScanLog.txt");
     await using var matchesSubscriber = new MatchesReporterSubscriber(outputFilePath);
-
 
     //                         new SimpleGreedyStreamScanner(matchesSubscriber.MatchHandler)
     var defaultStreamScanner = new DefaultStreamScanner(matchesSubscriber.MatchHandler);
 
     var watch = Stopwatch.StartNew();
-    Console.WriteLine($"START: {DateTime.Now:O}");
+    Console.WriteLine($">>>Всего будет обработано: {streams.Count} файлов{Environment.NewLine}");
+    Console.WriteLine($"START: {DateTime.Now:hh:mm:ss.fff}");
 
     await defaultStreamScanner.ScanStreamsInParallelAsync(
         streams: streams,
@@ -88,7 +66,7 @@ async Task MainFlow()
         CancellationToken.None);
 
     watch.Stop();
-    Console.WriteLine($"END: {DateTime.Now:O}");
+    Console.WriteLine($"END: {DateTime.Now:hh:mm:ss.fff}");
     Console.WriteLine($"Time: {watch.Elapsed.TotalMilliseconds} ms");
     Console.WriteLine($"Результат записан в файл: {Path.GetFullPath(outputFilePath)}");
 
@@ -100,6 +78,7 @@ async Task MainFlow()
     // -----------------------------------------------------------------------------------------------------------------
     bool AllFilesAtDefaultFilePathsDoNotExist() => !defaultFilePaths.Where(File.Exists).Any();
 
+
     StreamScanParams HandleManualInput() => new(
         start: "<h0ost endtime=\"",
         end: "></port></ports></hos0t>",
@@ -109,47 +88,54 @@ async Task MainFlow()
         ignoreCase: false,
         path: "data.xml");
 
-    StreamScanParams HandleInputFromCmdArgs() => new(
-        start: args[0],
-        end: args[1],
-        contains: args[2],
-        template: args[3],
-        max: Int32.Parse(args[4]),
-        ignoreCase: false,
-        path: args[5]);
-
-    static (StreamScanParams, bool) HandleInputCore()
+    StreamScanParams HandleCmdArgsInput()
     {
-        Console.Write("Введите start: ");
-        string start = Console.ReadLine() ?? string.Empty;
+        string filePath = args[5];
+        if (!File.Exists(filePath)) 
+            Console.WriteLine($"!!!Указанный файл не существует: {Path.GetFullPath(filePath)}{Environment.NewLine}");
 
-        Console.Write("Введите end: ");
-        string end = Console.ReadLine() ?? string.Empty;
-
-        Console.Write("Введите contains: ");
-        string contains = Console.ReadLine() ?? string.Empty;
-
-        Console.Write("Введите template: ");
-        string template = Console.ReadLine() ?? string.Empty;
-
-        Console.Write("Введите max: ");
-        int max = int.Parse(Console.ReadLine() ?? string.Empty);
-
-        Console.Write("Сгенерировать файл автоматически? (y/n): ");
-        string generateFileStr = Console.ReadLine() ?? string.Empty;
-        bool shouldGenerateFile = generateFileStr.Equals("y", StringComparison.InvariantCultureIgnoreCase);
-
-        var streamScanParams = new StreamScanParams(start, end, contains, template, max, ignoreCase: false);
-        return (streamScanParams, shouldGenerateFile);
+        return new(
+            start: args[0],
+            end: args[1],
+            contains: args[2],
+            template: args[3],
+            max: Int32.Parse(args[4]),
+            ignoreCase: false,
+            path: filePath);
     }
 
-    static (StreamScanParams, bool) HandleInput()
+    static (StreamScanParams, bool) HandleConsoleInput()
     {
+        static (StreamScanParams, bool) HandleConsoleInputCore()
+        {
+            Console.Write("Введите start: ");
+            string start = Console.ReadLine() ?? string.Empty;
+
+            Console.Write("Введите end: ");
+            string end = Console.ReadLine() ?? string.Empty;
+
+            Console.Write("Введите contains: ");
+            string contains = Console.ReadLine() ?? string.Empty;
+
+            Console.Write("Введите template: ");
+            string template = Console.ReadLine() ?? string.Empty;
+
+            Console.Write("Введите max: ");
+            int max = int.Parse(Console.ReadLine() ?? string.Empty);
+
+            Console.Write("Сгенерировать файл автоматически? (y/n): ");
+            string generateFileStr = Console.ReadLine() ?? string.Empty;
+            bool shouldGenerateFile = generateFileStr.Equals("y", StringComparison.InvariantCultureIgnoreCase);
+
+            var streamScanParams = new StreamScanParams(start, end, contains, template, max, ignoreCase: false);
+            return (streamScanParams, shouldGenerateFile);
+        }
+
         while (true)
         {
             try
             {
-                return HandleInputCore();
+                return HandleConsoleInputCore();
             }
             catch (Exception e)
             {
@@ -180,6 +166,28 @@ async Task MainFlow()
             filePath: fallBackFilePath,
             fileSizeInMegaBytes: 30);
     }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+void GenerateDataFlow()
+{
+    // Template: (\+\d{1,2}\s?)?(\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}               | Regex для номера телефона (US)
+
+    TestDataProvider.GenerateTestDataFromVasheGmailPismo(
+        matchedValue: "+1 (555) 123-4567",
+        startMarker: "START",
+        endMarker: "ENDING",
+        containsMarker: "CONTAINS",
+        filePath: Path.Combine(filesDirectoryPath, "TD1_200MB_FromGmail_RangeFrom1000to50000+.txt"),
+        fileSizeInMegaBytes: 200);
+
+    // TestDataProvider.GenerateFullyRandomTestData(
+    //     matchedValue: "+1 (555) 123-4567",
+    //     startMarker: "START",
+    //     endMarker: "ENDING",
+    //     containsMarker: "CONTAINS",
+    //     filePath: Path.Combine(filesDirectoryPath, "TD2_200MB_LotsOfValidAndInvalidRanges.txt"),
+    //     fileSizeInMegaBytes: 200);
 }
 
 

@@ -9,7 +9,7 @@ public class DefaultStreamScanner : StreamScannerBase
     /// <inheritdoc/>
     public DefaultStreamScanner(Action<RangeMatch>? matchNotifier = null) : base(matchNotifier) { }
 
-    
+
     /// <inheritdoc/>
     public override async Task ScanStreamAsync(
         Stream stream,
@@ -33,36 +33,26 @@ public class DefaultStreamScanner : StreamScannerBase
     {
         var savedRangeParts = new RangePartsAggregator(readBufferSize, scanParams);
 
-        var (isFindingStart, isInRewindMode) = (true, false);
+        bool isFindingStart = true;
         var prevReminderLen = 0;
 
         minReadSize = Math.Clamp(minReadSize, 1, readBufferSize);
 
         while (true)
         {
-            if (!isInRewindMode)
-            {
-                byte[] currentReadBuffer = savedRangeParts.CurrentReadBuffer;
+            byte[] currentReadBuffer = savedRangeParts.CurrentReadBuffer;
 
-                int bytesRead = await stream.ReadAtLeastAsync(
-                    currentReadBuffer.AsMemory(prevReminderLen, readBufferSize), minReadSize, false, token);
+            int bytesRead = await stream.ReadAtLeastAsync(
+                currentReadBuffer.AsMemory(prevReminderLen, readBufferSize), minReadSize, false, token);
 
-                if (bytesRead == 0) break;
+            if (bytesRead == 0) break;
 
-                Memory<byte> newDataPartWithPrevReminder = currentReadBuffer.AsMemory(0, prevReminderLen + bytesRead);
+            Memory<byte> newDataPartWithPrevReminder = currentReadBuffer.AsMemory(0, prevReminderLen + bytesRead);
 
-                if (isFindingStart)
-                    FindStartInNewData(newDataPartWithPrevReminder);
-                else
-                    FindEndInNewData(newDataPartWithPrevReminder);
-            }
+            if (isFindingStart)
+                FindStartInNewData(newDataPartWithPrevReminder);
             else
-            {
-                ReadOnlyMemory<byte> rangeWithRemovedStart = savedRangeParts.ConstructRangeWithoutStart();
-                FindStartInAccumulatedData(rangeWithRemovedStart);
-
-                isInRewindMode = false;
-            }
+                FindEndInNewData(newDataPartWithPrevReminder);
         }
 
         return;
@@ -94,14 +84,22 @@ public class DefaultStreamScanner : StreamScannerBase
                     return;
                 }
 
-                if (RangeIsNotValidLength(scanParams.StartLen + savedRangeParts.TotalLen + dataPart.Length))
-                {
-                    savedRangeParts.AddNewPart(dataPart);
-                    savedRangeParts.TrimToFitMaxLength(scanParams.Max);
-                    (isFindingStart, isInRewindMode) = (true, true);
-                }
-                else SetEndReminderAndSavePart(dataPart);
+                savedRangeParts.AddNewPart(dataPart);
 
+                if (RangeIsNotValidLength(scanParams.StartLen + savedRangeParts.TotalLen))
+                {
+                    savedRangeParts.TrimToFitMaxLength(scanParams.Max - 1); // ?: (- 1)
+                    if (!FindStartInAccumulatedData(out int remainDataCount))
+                    {
+                        savedRangeParts.DropAccumulatedParts();
+                        return;
+                    }
+
+                    remainDataCount = Math.Min(remainDataCount, dataPart.Length);
+                    dataPart = dataPart.Slice(dataPart.Length - remainDataCount, remainDataCount);
+                }
+
+                SetEndReminderAndTrimLastPart(dataPart);
                 return;
             }
 
@@ -114,158 +112,90 @@ public class DefaultStreamScanner : StreamScannerBase
 
             if (RangeIsNotValidLength(scanParams.StartLen + savedRangeParts.TotalLen + indexOfEnd + scanParams.EndLen))
             {
-                savedRangeParts.AddLastPart(dataPart, indexOfEnd);
-                savedRangeParts.TrimToFitMaxLength(scanParams.Max); // max - ?
-                (isFindingStart, isInRewindMode) = (true, true);    // мб сразу вызвать метод поиска
-                return;
+                savedRangeParts.AddNewPart(dataPart[..indexOfEnd]);
+                savedRangeParts.TrimToFitMaxLength(scanParams.Max - scanParams.EndLen); // ?: (- scanParams.EndLen)
+                if (!FindStartInAccumulatedData(out _))
+                {
+                    FindingStartInReallocatedRemainData(dataPart[indexOfEnd..]);
+                    return;
+                }
+
+                savedRangeParts.ConstructRangeAndProcess(
+                    scanParams.StartBytes, scanParams.EndBytes, ProcessRange);
+            }
+            else
+            {
+                savedRangeParts.ConstructRangeAndProcess(
+                    scanParams.StartBytes, dataPart[..(indexOfEnd + scanParams.EndLen)], ProcessRange);
             }
 
-            ReadOnlyMemory<byte> constructedRange = savedRangeParts
-                .ConstructRange(scanParams.StartBytes, dataPart[..(indexOfEnd + scanParams.EndLen)]);
-            ProcessRange(constructedRange);
-
-            FindingStartInRemainData(dataPart[(indexOfEnd + scanParams.EndLen)..]);
+            prevReminderLen = 0;
+            FindingStartInReallocatedRemainData(dataPart[(indexOfEnd + scanParams.EndLen)..]);
             return;
 
             // ---------------------------------------------------------------------------------------------------------
             void FindingStartInRemainData(ReadOnlyMemory<byte> remainData)
             {
                 savedRangeParts.DropAccumulatedParts();
+
                 (isFindingStart, prevReminderLen) = (true, 0);
                 FindStartInNewData(remainData);
             }
+
+            void FindingStartInReallocatedRemainData(ReadOnlyMemory<byte> remainData)
+            {
+                remainData = remainData.CopyToAndFitDest(
+                    savedRangeParts.CurrentReadBuffer.AsMemory(prevReminderLen, remainData.Length));
+                savedRangeParts.DropAccumulatedParts();
+
+                isFindingStart = true;
+                FindStartInNewData(savedRangeParts.CurrentReadBuffer.AsMemory(0, prevReminderLen + remainData.Length));
+            }
         }
 
-
-        void FindStartInAccumulatedData(ReadOnlyMemory<byte> data)
+        bool FindStartInAccumulatedData(out int remainDataCount)
         {
+            remainDataCount = 0;
+            isFindingStart = true;
+
+            var rangeAndMemoryOwner = savedRangeParts.ConstructRangeWithoutStart();
+            ReadOnlyMemory<byte> data = rangeAndMemoryOwner.Range;
+            using IMemoryOwner<byte> memoryOwner = rangeAndMemoryOwner.MemoryOwner;
+
             int indexOfStart = data.Span.IndexOf(scanParams.StartBytes, scanParams.IgnoreCase);
             if (indexOfStart is -1)
             {
-                SetStartReminderAndDropAllParts(data);
-                return;
+                SetStartReminder(data);
+                return false;
             }
 
             (isFindingStart, prevReminderLen) = (false, 0);
-            savedRangeParts.Slice(indexOfStart + scanParams.StartLen);
-            FindEndInAccumulatedData(data[(indexOfStart + scanParams.StartLen)..]);
-        }
-
-        void FindEndInAccumulatedData(ReadOnlyMemory<byte> data)
-        {
-            if (data.Length == 0) return;
-
-            if (savedRangeParts.SavedEndPos >= 0)
-            {
-                int savedEndPos = savedRangeParts.SavedEndPos.Value;
-
-                ReadOnlyMemory<byte> constructedRange1 =
-                    MemoryHelpers.JoinMemory(scanParams.StartBytes, data[..(savedEndPos + scanParams.EndLen)]);
-                ProcessRange(constructedRange1);
-
-                savedRangeParts.Slice(savedEndPos + scanParams.EndLen);
-                FindingStartInRemainAccumulatedData(data[(savedEndPos + scanParams.EndLen)..]);
-                return;
-            }
-
-            int indexOfEnd = data.Span.IndexOf(scanParams.EndBytes, scanParams.IgnoreCase);
-            if (indexOfEnd is -1) // Конец диапазона не найден
-            {
-                // Если не нашли конец и диапазон стал не валидным, срезаем и начанием искать начало
-                if (RangeIncludesForbiddenSymbol(data, out int indexOfSymbol1))
-                {
-                    savedRangeParts.Slice(indexOfSymbol1 + 1);
-                    FindingStartInRemainAccumulatedData(data[(indexOfSymbol1 + 1)..]);
-                    return;
-                }
-
-                if (RangeIsNotValidLength(scanParams.StartLen + data.Length))
-                {
-                    savedRangeParts.TrimToFitMaxLength(scanParams.Max);
-                    int sliceStartIndex = Math.Max(0, data.Length - scanParams.Max);
-                    FindingStartInRemainAccumulatedData(data[sliceStartIndex..]);
-                    return;
-                }
-
-                // Если не нашли конец, но диапазон все еще валидный, устанавливаем остаток и выходим из перемотки
-                SetEndReminderAndTrimLastPartEnding(data);
-                return;
-            }
-
-            // Конец диапазона найден
-            if (RangeIncludesForbiddenSymbol(data[..indexOfEnd], out int indexOfSymbol2))
-            {
-                savedRangeParts.Slice(indexOfSymbol2 + 1);
-                FindingStartInRemainAccumulatedData(data[(indexOfSymbol2 + 1)..]);
-                return;
-            }
-
-            if (RangeIsNotValidLength(scanParams.StartLen + indexOfEnd + scanParams.EndLen))
-            {
-                savedRangeParts.SavedEndPos = indexOfEnd;
-                savedRangeParts.TrimToFitMaxLength(scanParams.Max);
-                int sliceStartIndex = Math.Max(0, indexOfEnd + scanParams.EndLen - scanParams.Max);
-                FindingStartInRemainAccumulatedData(data[sliceStartIndex..]);
-                return;
-            }
-
-            ReadOnlyMemory<byte> constructedRange2 =
-                MemoryHelpers.JoinMemory(scanParams.StartBytes, data[..(indexOfEnd + scanParams.EndLen)]);
-            ProcessRange(constructedRange2);
-
-            savedRangeParts.Slice(indexOfEnd + scanParams.EndLen);
-            FindingStartInRemainAccumulatedData(data[(indexOfEnd + scanParams.EndLen)..]);
-            return;
-
-            // ---------------------------------------------------------------------------------------------------------
-            void FindingStartInRemainAccumulatedData(ReadOnlyMemory<byte> remainData)
-            {
-                (isFindingStart, prevReminderLen) = (true, 0);
-                FindStartInAccumulatedData(remainData);
-            }
+            int indexToSlice = indexOfStart + scanParams.StartLen;
+            remainDataCount = data.Length - indexToSlice;
+            savedRangeParts.Slice(indexToSlice);
+            return true;
         }
 
 
         void SetNewReminder(ReadOnlyMemory<byte> data, int maxReminderLength)
         {
             prevReminderLen = Math.Min(maxReminderLength, data.Length);
-            int indexToSlice = data.Length - prevReminderLen;
-            data[indexToSlice..].CopyTo(savedRangeParts.CurrentReadBuffer);
-        }
-
-        void SetStartReminder(ReadOnlyMemory<byte> data) => SetNewReminder(data, scanParams.StartLen - 1);
-
-        void SetStartReminderAndDropAllParts(ReadOnlyMemory<byte> data)
-        {
-            SetStartReminder(data);
-            savedRangeParts.DropAccumulatedParts();
-        }
-
-
-        void SetNewReminderAndSavePart(ReadOnlyMemory<byte> data, int maxReminderLength)
-        {
-            prevReminderLen = Math.Min(maxReminderLength, data.Length);
             int indexOfReminder = data.Length - prevReminderLen;
-
-            savedRangeParts.AddNewPart(data[..indexOfReminder]);
             data[indexOfReminder..].CopyTo(savedRangeParts.CurrentReadBuffer);
         }
 
-        void SetEndReminderAndSavePart(ReadOnlyMemory<byte> data) =>
-            SetNewReminderAndSavePart(data, scanParams.EndLen - 1);
+        void SetStartReminder(ReadOnlyMemory<byte> data) =>
+            SetNewReminder(data, scanParams.StartLen - 1);
 
 
-        void SetNewReminderEndTrimEndAccumulatedRange(ReadOnlyMemory<byte> data, int maxReminderLength)
+        void SetNewReminderAndTrimLastPart(ReadOnlyMemory<byte> data, int maxReminderLength)
         {
-            prevReminderLen = Math.Min(maxReminderLength, data.Length);
-            int indexToSlice = data.Length - prevReminderLen;
-
+            SetNewReminder(data, maxReminderLength);
             savedRangeParts.TrimLastPartEnding(prevReminderLen);
-            data[indexToSlice..].CopyTo(savedRangeParts.CurrentReadBuffer);
         }
 
-        void SetEndReminderAndTrimLastPartEnding(ReadOnlyMemory<byte> data) =>
-            SetNewReminderEndTrimEndAccumulatedRange(data, scanParams.EndLen - 1);
+        void SetEndReminderAndTrimLastPart(ReadOnlyMemory<byte> data) =>
+            SetNewReminderAndTrimLastPart(data, scanParams.EndLen - 1);
 
 
         void ProcessRange(ReadOnlyMemory<byte> rangeData)
@@ -286,19 +216,14 @@ public class DefaultStreamScanner : StreamScannerBase
 
         bool RangeIncludesForbiddenSymbol(ReadOnlyMemory<byte> rangeData, out int index)
         {
-            index = rangeData.Span.IndexOfAny(Nul, (byte)'\t');
-            if (index > -1)
-            {
-                
-            }
+            // Вообще говоря лучше вынести запретные символы в ScanParams
+            // index = rangeData.Span.IndexOfAny(Nul, Cr, Lf);
+            index = rangeData.Span.IndexOfAny(Nul, Tab);
             return index is not -1;
         }
 
         bool RangeDoNotIncludesContains(ReadOnlyMemory<byte> rangeData) =>
             rangeData.Span.IndexOf(scanParams.ContainsBytes, scanParams.IgnoreCase) is -1;
-
-        int IndexOfAnyForbiddenSymbols(ReadOnlyMemory<byte> rangeData) =>
-            rangeData.Span.IndexOfAny(Nul, Cr, Lf);
     }
 
 
@@ -309,34 +234,23 @@ public class DefaultStreamScanner : StreamScannerBase
     /// </summary>
     private class RangePartsAggregator
     {
-        private readonly ArrayPool<byte> _arrayPool;
+        private readonly ArrayPool<byte> _arrayPool = ArrayPool<byte>.Shared;
         private readonly List<byte[]> _rentedArrays = new();
         private readonly int _rangePartReadBufferSize;
 
         private readonly List<ReadOnlyMemory<byte>> _rangeParts = new();
 
-        private readonly int _endLen;
-
         public RangePartsAggregator(int baseBufferSize, StreamScanParams scanParams)
         {
-            _endLen = scanParams.EndLen;
-
-            int maxRangeLenForBuckets = Math.Min(scanParams.Max, 8 * 1024 * 1024);
-            _rangePartReadBufferSize = baseBufferSize + Math.Max(scanParams.StartLen, scanParams.EndLen);
-            _arrayPool =
-                ArrayPool<byte>.Create(_rangePartReadBufferSize, maxRangeLenForBuckets / _rangePartReadBufferSize + 2);
-
+            _rangePartReadBufferSize = baseBufferSize + (scanParams.StartLen - 1) + (scanParams.EndLen - 1);
             CurrentReadBuffer = _arrayPool.Rent(_rangePartReadBufferSize);
         }
 
-        
         public byte[] CurrentReadBuffer { get; private set; }
-        
+
         public int TotalLen => _rangeParts.Sum(part => part.Length);
 
-        public int? SavedEndPos { get; set; }
 
-        
         public void AddNewPart(ReadOnlyMemory<byte> dataPart)
         {
             // Сохраняем текущий буффер в список арендованных массивов
@@ -349,27 +263,17 @@ public class DefaultStreamScanner : StreamScannerBase
             CurrentReadBuffer = _arrayPool.Rent(_rangePartReadBufferSize);
         }
 
-        public void AddLastPart(ReadOnlyMemory<byte> dataPart, int endPos)
-        {
-            SavedEndPos = TotalLen + endPos;
-            AddNewPart(dataPart);
-        }
-
         public void DropAccumulatedParts()
         {
             _rentedArrays.ForEach(rentedArray => _arrayPool.Return(rentedArray));
             _rentedArrays.Clear();
             _rangeParts.Clear();
-            SavedEndPos = null;
         }
 
-        
+
         public void Slice(int start)
         {
-            int indexOfFirstValidData = start;
-            if (indexOfFirstValidData <= 0) return;
-
-            SavedEndPos -= indexOfFirstValidData;
+            if (start <= 0) return;
 
             int countToRemove = 0;
             int curLengthSum = 0;
@@ -379,9 +283,9 @@ public class DefaultStreamScanner : StreamScannerBase
                 ReadOnlyMemory<byte> curPart = _rangeParts[i];
                 curLengthSum += curPart.Length;
 
-                if (indexOfFirstValidData <= curLengthSum)
+                if (start <= curLengthSum)
                 {
-                    _rangeParts[i] = curPart.Slice(curPart.Length - (curLengthSum - indexOfFirstValidData));
+                    _rangeParts[i] = curPart.Slice(curPart.Length - (curLengthSum - start));
                     countToRemove = i;
                     if (_rangeParts[i].Length is 0) countToRemove++;
                     break;
@@ -393,12 +297,12 @@ public class DefaultStreamScanner : StreamScannerBase
             List<byte[]> arraysToReturn = _rentedArrays.Take(countToRemove).ToList();
             arraysToReturn.ForEach(rentedArray => _arrayPool.Return(rentedArray));
             _rentedArrays.RemoveRange(0, countToRemove);
-            
-            // if (SavedEndPos < 0) SavedEndPos = null;
         }
 
         public void TrimLastPartEnding(int countToTrim)
         {
+            if (countToTrim is 0) return;
+
             ReadOnlyMemory<byte> lastPart = _rangeParts[^1];
             countToTrim = Math.Min(lastPart.Length, countToTrim);
             _rangeParts[^1] = lastPart.Slice(0, lastPart.Length - countToTrim);
@@ -412,22 +316,35 @@ public class DefaultStreamScanner : StreamScannerBase
 
         public void TrimToFitMaxLength(int maxLength)
         {
-            if (SavedEndPos < 0) SavedEndPos = null;
-            int indexOfFirstValidData = (SavedEndPos + _endLen ?? TotalLen) - maxLength;
+            int indexOfFirstValidData = TotalLen - maxLength;
             Slice(indexOfFirstValidData);
         }
 
-        
-        public Memory<byte> ConstructRange(ReadOnlyMemory<byte> firstPart, ReadOnlyMemory<byte> lastPart) =>
-            MemoryHelpers.JoinMemory(firstPart, _rangeParts, lastPart);
 
-        public Memory<byte> ConstructRangeWithoutStart() =>
-            MemoryHelpers.JoinMemory(_rangeParts);
+        public (Memory<byte> Range, IMemoryOwner<byte> MemoryOwner) ConstructRangeWithoutStart()
+        {
+            IMemoryOwner<byte> constructRangeBuffer = MemoryPool<byte>.Shared.Rent(TotalLen);
+            return (MemoryHelpers.JoinMemory(_rangeParts, constructRangeBuffer.Memory), constructRangeBuffer);
+        }
+
+
+        public void ConstructRangeAndProcess(
+            ReadOnlyMemory<byte> firstPart,
+            ReadOnlyMemory<byte> lastPart,
+            Action<ReadOnlyMemory<byte>> rangeProcessor)
+        {
+            byte[] constructRangeBuffer = ArrayPool<byte>.Shared.Rent(firstPart.Length + TotalLen + lastPart.Length);
+
+            ReadOnlyMemory<byte> range =
+                MemoryHelpers.JoinMemory(firstPart, _rangeParts, lastPart, constructRangeBuffer);
+            rangeProcessor(range);
+
+            ArrayPool<byte>.Shared.Return(constructRangeBuffer);
+        }
     }
 
     private const byte Nul = 0;
     private const byte Lf = 10;
     private const byte Cr = 13;
+    private const byte Tab = (byte) '\t';
 }
-
-// reader.AdvanceTo(dataSequence.End);

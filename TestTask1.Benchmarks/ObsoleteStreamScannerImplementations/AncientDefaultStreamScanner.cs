@@ -5,10 +5,10 @@ using TestTask1.StreamScanner;
 
 namespace TestTask1.Benchmarks.ObsoleteStreamScannerImplementations;
 
-public class OldStreamScanner : StreamScannerBase
+public class AncientDefaultStreamScanner : StreamScannerBase
 {
     /// <inheritdoc/>
-    public OldStreamScanner(Action<RangeMatch>? matchNotifier = null) : base(matchNotifier) { }
+    public AncientDefaultStreamScanner(Action<RangeMatch>? matchNotifier = null) : base(matchNotifier) { }
 
     /// <inheritdoc/>
     public override async Task ScanStreamAsync(

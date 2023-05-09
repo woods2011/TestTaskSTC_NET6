@@ -15,7 +15,7 @@ public class StreamScannerBenchmarks
 
     [Benchmark(Baseline = true)]
     [ArgumentsSource(nameof(TestDataSets))]
-    public async Task DefaultStreamScanner(TestDataSet testData)
+    public async Task NewDefaultScanner(TestDataSet testData)
     {
         // MemoryStream stream = testData.InMemoryVersion;
         // stream.Position = 0;
@@ -25,22 +25,35 @@ public class StreamScannerBenchmarks
 
     [Benchmark]
     [ArgumentsSource(nameof(TestDataSets))]
-    public async Task SimpleGreedyStreamScanner(TestDataSet testData)
+    public async Task OldDefaultScanner(TestDataSet testData)
     {
-        // MemoryStream stream = testData.InMemoryVersion;
-        // stream.Position = 0;
+        await using FileStream stream = File.Open(testData.FilePath, FileMode.Open, FileAccess.Read);
+        await new OldDefaultStreamScanner().ScanStreamAsync(stream, testData.ScanParams, BufferSize);
+    }
+
+    // [Benchmark]
+    // [ArgumentsSource(nameof(TestDataSets))]
+    // public async Task AncientDefaultScanner(TestDataSet testData)
+    // {
+    //     await using FileStream stream = File.Open(testData.FilePath, FileMode.Open, FileAccess.Read);
+    //     await new AncientDefaultStreamScanner().ScanStreamAsync(stream, testData.ScanParams, BufferSize);
+    // }
+
+
+    [Benchmark]
+    [ArgumentsSource(nameof(TestDataSets))]
+    public async Task NewSimpleGreedyScanner(TestDataSet testData)
+    {
         await using FileStream stream = File.Open(testData.FilePath, FileMode.Open, FileAccess.Read);
         await new SimpleGreedyStreamScanner().ScanStreamAsync(stream, testData.ScanParams, BufferSize);
     }
 
     [Benchmark]
     [ArgumentsSource(nameof(TestDataSets))]
-    public async Task OldScanner(TestDataSet testData)
+    public async Task OldSimpleGreedyScanner(TestDataSet testData)
     {
-        // MemoryStream stream = testData.InMemoryVersion;
-        // stream.Position = 0;
         await using FileStream stream = File.Open(testData.FilePath, FileMode.Open, FileAccess.Read);
-        await new OldStreamScanner().ScanStreamAsync(stream, testData.ScanParams, BufferSize);
+        await new OldSimpleGreedyStreamScanner().ScanStreamAsync(stream, testData.ScanParams, BufferSize);
     }
 
 
@@ -48,7 +61,7 @@ public class StreamScannerBenchmarks
     {
         const int randomSeedValue = 5;
         const string filesDirectoryPath = "TestFiles";
-        
+
         if (!Directory.Exists(filesDirectoryPath)) // Directory.CreateDirectory(filesDirectoryPath)
             Directory.CreateDirectory(filesDirectoryPath);
 
